@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Incremental Stats Game 🧮
-# A command-line incremental game designed to run on GitHub Codespaces or locally.
+# Every tick triples 'a' and auto-generates lower stats
 
 import math
 
@@ -11,13 +11,30 @@ class Game:
         self.all_boost = 1
         self.a_boost = 1
         self.upgrade_price = 100
-        self.unlock_cost = 1e3
+        self.unlock_cost = 100
         self.challenge_level = 0
         self.challenge_active = False
 
     def tick(self):
-        growth = self.stats["a"] * 2 * self.all_boost * self.a_boost
-        self.stats["a"] += growth
+        new_stats = self.stats.copy()
+        n = len(self.unlocked)
+        for i in range(n):
+            lower_stat = self.unlocked[i]
+            if lower_stat == "a":
+                new_stats["a"] *= 3 * self.all_boost * self.a_boost
+            for j in range(i+1, n):
+                higher_stat = self.unlocked[j]
+                distance = j - i
+                h_amt = self.stats[higher_stat]
+                l_amt = self.stats[lower_stat]
+                if 1 <= distance <= 5:
+                    new_stats[lower_stat] += h_amt * (5 * distance)
+                else:
+                    exp = distance - 5
+                    if exp > 10:
+                        exp = 10 + math.log10(exp)
+                    new_stats[lower_stat] += l_amt**exp
+        self.stats = new_stats
         return self.stats["a"]
 
     def buy_upgrade(self):
@@ -41,23 +58,16 @@ class Game:
             print("❌ Not enough 'a' to unlock next stat!")
 
     def _next_stat_name(self, name):
-        alphabet = [chr(i) for i in range(97, 123)] + [chr(i) for i in range(65, 91)]
+        alphabet = [chr(i) for i in range(97,123)] + [chr(i) for i in range(65,91)]
         if name not in alphabet:
             prefix, last = name[:-1], name[-1]
-            if last == "Z":
-                return prefix + "a"
-            else:
-                return prefix + alphabet[alphabet.index(last) + 1]
-        else:
-            if name == "Z":
-                return "aa"
-            return alphabet[alphabet.index(name) + 1]
+            return prefix + "a" if last=="Z" else prefix + alphabet[alphabet.index(last)+1]
+        return "aa" if name=="Z" else alphabet[alphabet.index(name)+1]
 
     def start_challenge(self):
         if self.challenge_active:
             print("⚠️ Already in a challenge!")
             return
-
         self.challenge_active = True
         self.challenge_level += 1
         self._reset_progress()
@@ -67,8 +77,7 @@ class Game:
         if not self.challenge_active:
             print("❌ Not in a challenge.")
             return
-
-        reward = 1 + (self.challenge_level * 0.5)
+        reward = 1 + (self.challenge_level*0.5)
         self.a_boost *= reward
         self.challenge_active = False
         print(f"🎉 Challenge {self.challenge_level} complete! a boost ×{reward:.2f}")
@@ -79,7 +88,7 @@ class Game:
         self.all_boost = 1
         self.a_boost = 1
         self.upgrade_price = 100
-        self.unlock_cost = 1e3
+        self.unlock_cost = 100
 
     def show(self):
         print("\n📊 --- STATUS ---")
@@ -93,38 +102,28 @@ class Game:
         print("-----------------------\n")
 
     def _format(self, n):
-        suffixes = ["", "K", "M", "B", "T", "Qd", "Qn", "Sx", "Sp", "Oc", "No", "De"]
-        if n < 1000:
-            return f"{n:.2f}"
-        exp = int(math.log10(n) // 3)
-        exp = min(exp, len(suffixes) - 1)
-        return f"{n / (10 ** (3 * exp)):.2f}{suffixes[exp]}"
+        suffixes = ["","K","M","B","T","Qd","Qn","Sx","Sp","Oc","No","De"]
+        if n<1000: return f"{n:.2f}"
+        exp = int(math.log10(n)//3)
+        exp = min(exp,len(suffixes)-1)
+        return f"{n/(10**(3*exp)):.2f}{suffixes[exp]}"
 
 def main():
     game = Game()
     print("🎮 Welcome to Incremental Stats Game!")
     print("Commands: tick / upgrade / unlock / challenge / complete / show / exit")
-
     while True:
         cmd = input("> ").strip().lower()
-        if cmd == "tick":
+        if cmd=="tick":
             a = game.tick()
             print(f"Tick... a = {game._format(a)}")
-        elif cmd == "upgrade":
-            game.buy_upgrade()
-        elif cmd == "unlock":
-            game.unlock_next()
-        elif cmd == "challenge":
-            game.start_challenge()
-        elif cmd == "complete":
-            game.complete_challenge()
-        elif cmd == "show":
-            game.show()
-        elif cmd == "exit":
-            print("👋 Goodbye!")
-            break
-        else:
-            print("❓ Unknown command!")
+        elif cmd=="upgrade": game.buy_upgrade()
+        elif cmd=="unlock": game.unlock_next()
+        elif cmd=="challenge": game.start_challenge()
+        elif cmd=="complete": game.complete_challenge()
+        elif cmd=="show": game.show()
+        elif cmd=="exit": print("👋 Goodbye!"); break
+        else: print("❓ Unknown command!")
 
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
