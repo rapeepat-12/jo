@@ -22,7 +22,7 @@ class Game:
             lower_stat = self.unlocked[i]
             # Base automatic a generation: 10 a per tick
             if lower_stat == "a":
-                new_stats["a"] += 10 * self.all_boost * self.a_boost
+                new_stats["a"] += 10 *3 self.all_boost * self.a_boost
             for j in range(i+1, n):
                 higher_stat = self.unlocked[j]
                 distance = j - i
