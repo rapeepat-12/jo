@@ -10,7 +10,7 @@ class Game:
         self.unlocked = ["a"]
         self.all_boost = 1
         self.a_boost = 1
-        self.upgrade_price = 100
+        self.upgrade_price = 1.21
         self.unlock_cost = 1e3
         self.challenge_level = 0
         self.challenge_active = False
