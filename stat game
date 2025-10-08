@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""
+Incremental Stats Game (Python)
+
+This is a command-line prototype implementing:
+- Many stats labeled by position (a=1, b=2, ... z=26, A=27, B=28, ...)
+- Unlocking costs (in units of 'a') that grow strongly with stat index
+- Stat interactions as described earlier (nearby multiplicative boosts, far exponential boosts)
+- Two global upgrade tracks:
+    1) "All x2" upgrade: price starts at 100 a, multiplies by 10 each purchase
+    2) "a x10" prestige upgrade (available once player has unlocked stat at pos 27 (A)): price starts at 1_000 a, multiplies by 1_000 each purchase
+- 5 Challenges: increasing difficulty. Entering a challenge resets progress up to and including stat position 27 (A). Each challenge has a reward and debuff.
+- A readable large-number suffix formatter (K, M, B, ... Dc, then generator) for display.
+
+Note: This is a prototype for testing mechanics and balancing.
+"""
+
+import math
+import json
+import os
+from collections import defaultdict
+
+# -----------------------------
+# Utilities: suffix formatting
+# -----------------------------
+ALPHABET = [chr(i) for i in range(ord('a'), ord('z')+1)] + [chr(i) for i in range(ord('A'), ord('Z')+1)]
+FIRST_GRADE = [None, 'K','M','B','T','Qd','Qn','Sx','Sp','Oc','No','De']  # index by g
+SECOND_GRADE = ['Vt','Tg','qg','Qg','sg','Sg','Og','Ng','Ce']
+THIRD_GRADE = ['Du','Tr','Qa','Qi','Se','Si','Ot','Ni']
+FOURTH_GRADE = ['Mi','Mc','Na','Pi','Fm','At','Zp','Yc','Xo']
+
+# generate exponent mapping for the known suffixes to match the user's table
+SUFFIX_TO_EXP = {}
+# First grade: exponents 3,6,...,33
+for i in range(1, len(FIRST_GRADE)):
+    SUFFIX_TO_EXP[FIRST_GRADE[i]] = 3 * i
+# second grade: start at 63 and step 30 -> 63,93,...303
+for i, s in enumerate(SECOND_GRADE):
+    SUFFIX_TO_EXP[s] = 33 + 30*(i+1)
+# third grade: start at 603 and step 300
+for i, s in enumerate(THIRD_GRADE):
+    SUFFIX_TO_EXP[s] = 303 + 300*(i+1)
+# fourth grade: start at 5703 (we'll follow the cleaned deterministic system)
+for i, s in enumerate(FOURTH_GRADE):
+    SUFFIX_TO_EXP[s] = 2703 + 3000*(i+1)
+
+# fallback base-52 encoder/decoder for super large suffixes
+def encode_base52(n):
+    if n == 0:
+        return ALPHABET[0]
+    digits = []
+    while n > 0:
+        digits.append(ALPHABET[n % 52])
+        n //= 52
+    return ''.join(reversed(digits))
+
+def format_value(v, precision=2):
+    # Accept floats or ints. Show small numbers plainly.
+    if v < 1000:
+        return str(round(v, 6)).rstrip('0').rstrip('.')
+    exp = int(math.floor(math.log10(v)))
+    g = exp // 3
+    mant = v / (10 ** (3*g))
+    # try known first-grade (g 1..11)
+    if 1 <= g <= 11:
+        suffix = FIRST_GRADE[g]
+        return f"{round(mant, precision)}{suffix}"
+    # second-grade and third/fourth if matches known mapping by exponent
+    for suf, e in SUFFIX_TO_EXP.items():
+        if exp == e:
+            # exact match
+            mant = v / (10 ** e)
+            return f"{round(mant, precision)}{suf}"
+    # otherwise produce Dc + base52 token (Dc as marker)
+    # compute group index g such that group exponent = 3*g
+    token_index = g - 12
+    if token_index < 0:
+        token_index = 0
+    token = encode_base52(token_index)
+    return f"{round(mant, precision)}Dc{token}"
+
+# -----------------------------
+# Stat system & formulas
+# -----------------------------
+# Map stat index -> label like a,b,c,...,z,A,B,...,aa,ab...
+def stat_label(i):
+    # i is 1-based
+    # emulate excel-like sequence with lowercase then uppercase then 2-letter combos
+    labels = []
+    # single-letter lowercase
+    if 1 <= i <= 26:
+        return chr(ord('a') + i - 1)
+    # single-letter uppercase
+    if 27 <= i <= 52:
+        return chr(ord('A') + i - 27)
+    # else two-letter combos using base-52 alphabet
+    idx = i - 53  # zero-based
+    # produce base-52 like aa, ab,...
+    first = idx // 52
+    second = idx % 52
+    return ALPHABET[first] + ALPHABET[second]
+
+# Position of uppercase 'A' is 27
+STAT_POS_A_UPPER = 27
+
+# Initial stats: only 'a' exists and passive generation rate for each unlocked stat
+class GameState:
+    def __init__(self, max_stats=100):
+        self.max_stats = max_stats
+        self.unlocked = set([1])  # index 1 (a) unlocked
+        self.values = defaultdict(float)
+        self.values[1] = 0.0  # starting a amount
+        self.generation = defaultdict(float)  # per-tick generation from unlocked stats
+        self.generation[1] = 1.0  # base starting a generation (so player gets some a)
+        self.time = 0
+        # upgrades
+        self.all_x2_purchases = 0
+        self.all_x2_price = 100.0
+        self.a_x10_purchases = 0
+        self.a_x10_price = 1000.0
+        # challenge progress flags
+        self.completed_challenges = set()
+
+    def current_stats(self):
+        return {i: self.values[i] for i in sorted(self.unlocked)}
+
+# Cost formula for unlocking stat n (in units of 'a')
+# We want costs to be hard but deterministic. Use a formula:
+# cost(n) = base_cost * growth^(n-1) * 10^(3 * (n-1)^(1.08))
+# where base_cost = 10 (for b), growth = 2.5 gives multiplicative difficulty and the 10^term
+# forces huge exponential scale. The exponent power 1.08 slightly superlinear so higher stats grow rapidly.
+# We then apply a safety floor and return float.
+
+def unlock_cost_a(n):
+    if n == 1:
+        return 0.0
+    base = 10.0
+    growth = 2.5
+    # exponential exponent component
+    exp_component = 3.0 * ((n - 1) ** 1.08)
+    cost = base * (growth ** (n - 1)) * (10 ** exp_component)
+    return cost
+
+# Apply stat boosts from higher stats to lower stats using rules provided earlier.
+# S[j] boosts S[i] where j>i.
+# If 1 <= x <=5: multiply S[i] by (5*x) and then by S[j]
+# If x >5: exponent = j - 5; S[i] = (S[i] ** exponent) * S[j]
+# But because exponentials applied repeatedly explode, we use a safer effective exponent:
+# effective_exp = base_exp if base_exp <= 10 else 10 + log10(base_exp - 9)
+
+def effective_exponent(base_exp):
+    if base_exp <= 10:
+        return base_exp
+    return 10.0 + math.log10(max(1.0, base_exp - 9.0))
+
+def apply_all_boosts(state: GameState):
+    # We'll compute new effective values after applying boosts from unlocked stats only.
+    # Use base_values (pre-boosts) to avoid order dependence for multiplicative stacking.
+    base_values = {i: state.values.get(i, 0.0) for i in range(1, state.max_stats+1)}
+    new_values = base_values.copy()
+    for j in sorted(state.unlocked):
+        Sj = base_values.get(j, 0.0)
+        if Sj <= 0:
+            continue
+        for i in range(1, j):
+            if i not in state.unlocked:
+                continue
+            x = j - i
+            if 1 <= x <= 5:
+                multiplier = 5.0 * x * Sj
+                new_values[i] = new_values[i] * multiplier
+            else:
+                base_exp = float(j - 5)
+                eff_exp = effective_exponent(base_exp)
+                # avoid raising zero to a power; treat as small
+                val = max(1e-9, new_values[i])
+                new_values[i] = (val ** eff_exp) * Sj
+    # commit back
+    for k, v in new_values.items():
+        state.values[k] = v
+
+# Unlocking: consume 'a' and add stat generation
+def unlock_stat(state: GameState, n: int):
+    if n in state.unlocked:
+        return False, 'already unlocked'
+    cost = unlock_cost_a(n)
+    if state.values[1] < cost:
+        return False, f'need {format_value(cost)} a (you have {format_value(state.values[1])})'
+    state.values[1] -= cost
+    state.unlocked.add(n)
+    # Give a baseline generation rate for the newly unlocked stat (grows with n)
+    base_gen = 1.0 * (1.15 ** (n - 1))
+    state.generation[n] = base_gen
+    return True, f'unlocked {stat_label(n)} at cost {format_value(cost)} a'
+
+# Buy global all x2 upgrade
+def buy_all_x2(state: GameState):
+    price = state.all_x2_price
+    if state.values[1] < price:
+        return False, f'need {format_value(price)} a'
+    state.values[1] -= price
+    state.all_x2_purchases += 1
+    state.all_x2_price *= 10.0
+    # apply permanent effect: multiply all generation by 2
+    for k in state.generation:
+        state.generation[k] *= 2.0
+    return True, f'bought all x2; generation doubled'
+
+# Buy a x10 upgrade (available after unlocking position 27)
+def buy_a_x10(state: GameState):
+    if STAT_POS_A_UPPER not in state.unlocked:
+        return False, 'must unlock A first'
+    price = state.a_x10_price
+    if state.values[1] < price:
+        return False, f'need {format_value(price)} a'
+    state.values[1] -= price
+    state.a_x10_purchases += 1
+    state.a_x10_price *= 1000.0
+    # apply effect: multiply a generation and a value by 10
+    state.generation[1] *= 10.0
+    state.values[1] *= 10.0
+    return True, 'bought a x10 upgrade'
+
+# Ticking the simulation: generate resources
+def tick(state: GameState, ticks=1):
+    for _ in range(ticks):
+        # each unlocked stat contributes its generation to its stat value
+        for i in list(state.unlocked):
+            state.values[i] += state.generation.get(i, 0.0)
+        state.time += 1
+
+# -----------------------------
+# Challenges (5) - escalating
+# Each challenge:
+# - has a difficulty threshold (required stat sums or time)
+# - if you enter it, your stats up to pos 27 (A) are reset (values and unlocked?)
+#   we'll reset values and unlocks for stats 1..27 but keep higher unlocked stats
+# - reward: permanent multiplier to some stats and a one-time a grant
+# - debuff: the reset
+# We'll define increasing difficulties and rewards.
+# -----------------------------
+
+CHALLENGES = [
+    {
+        'id': 1,
+        'name': 'Training Grounds',
+        'requirement': lambda s: s.values[1] >= 100.0,
+        'reward': lambda s: (s.generation.__setitem__(1, s.generation.get(1,1.0)*1.2), s.values.__setitem__(1, s.values.get(1,0.0)+50.0)),
+        'desc': 'Easy: +20% a generation; +50 a on completion',
+    },
+    {
+        'id': 2,
+        'name': 'Gauntlet',
+        'requirement': lambda s: s.values[1] >= 1e4,
+        'reward': lambda s: (s.generation.__setitem__(2, s.generation.get(2,1.0)*1.5), s.values.__setitem__(1, s.values.get(1,0.0)+200.0)),
+        'desc': 'Moderate: +50% b generation; +200 a',
+    },
+    {
+        'id': 3,
+        'name': 'Trial of Might',
+        'requirement': lambda s: s.values[1] >= 1e8,
+        'reward': lambda s: (s.generation.__setitem__(3, s.generation.get(3,1.0)*2.0), s.values.__setitem__(1, s.values.get(1,0.0)+2000.0)),
+        'desc': 'Hard: +100% c generation; +2000 a',
+    },
+    {
+        'id': 4,
+        'name': 'Ascetic Challenge',
+        'requirement': lambda s: s.values[1] >= 1e16,
+        'reward': lambda s: (s.generation.__setitem__(4, s.generation.get(4,1.0)*3.0), s.values.__setitem__(1, s.values.get(1,0.0)+2e5)),
+        'desc': 'Very Hard: +200% d generation; +200k a',
+    },
+    {
+        'id': 5,
+        'name': 'The Impossible Fold',
+        'requirement': lambda s: s.values[1] >= 1e40,
+        'reward': lambda s: (s.generation.__setitem__(5, s.generation.get(5,1.0)*5.0), s.values.__setitem__(1, s.values.get(1,0.0)+1e9)),
+        'desc': 'Insane: +400% e generation; +1e9 a',
+    }
+]
+
+# Enter a challenge: check requirement, then apply debuff (reset upto pos 27), then run reward
+def enter_challenge(state: GameState, cid: int):
+    ch = next((c for c in CHALLENGES if c['id'] == cid), None)
+    if not ch:
+        return False, 'unknown challenge'
+    if not ch['requirement'](state):
+        return False, 'requirement not met'
+    # Debuff: reset progress values and unlocked for stats 1..27 (inclusive)
+    for i in range(1, STAT_POS_A_UPPER+1):
+        state.values[i] = 0.0
+        if i in state.unlocked and i != 1:
+            state.unlocked.remove(i)
+        state.generation[i] = 0.0
+    # Keep higher stats and purchases
+    # Apply the reward
+    ch['reward'](state)
+    state.completed_challenges.add(cid)
+    return True, f'completed {ch["name"]}: {ch["desc"]}'
+
+# -----------------------------
+# Simple CLI to try the game
+# -----------------------------
+
+def help_text():
+    return '''Commands:
+    status                        - show unlocked stats and values
+    tick N                        - advance N ticks (default 1)
+    unlock N                      - attempt to unlock stat at position N (1-based, a=1)
+    unlock_label L                - unlock by label like 'b' or 'A' (case sensitive)
+    buy_all_x2                    - buy global x2 upgrade (price grows x10)
+    buy_a_x10                     - buy a x10 upgrade (requires A unlocked; price x1000)
+    challenge N                   - enter challenge id N (1..5)
+    save FILE                     - save game state
+    load FILE                     - load game state
+    help                          - show this
+    quit                          - exit
+    '''
+
+def label_to_pos(label):
+    # reverse of stat_label for common labels
+    if len(label) == 1 and 'a' <= label <= 'z':
+        return ord(label) - ord('a') + 1
+    if len(label) == 1 and 'A' <= label <= 'Z':
+        return ord(label) - ord('A') + 27
+    # two-letter combos -> compute base-52 index
+    if len(label) == 2:
+        first = ALPHABET.index(label[0])
+        second = ALPHABET.index(label[1])
+        idx = first * 52 + second
+        return 53 + idx
+    return None
+
+
+def main():
+    state = GameState(max_stats=100)
+    print('Incremental Stats Game prototype. Type help for commands.')
+    while True:
+        try:
+            cmd = input('> ').strip()
+        except EOFError:
+            break
+        if not cmd:
+            continue
+        parts = cmd.split()
+        c = parts[0]
+        if c == 'help':
+            print(help_text())
+        elif c == 'status':
+            print(f'Time: {state.time}')
+            print(f"a: {format_value(state.values.get(1,0.0))}")
+            print('Unlocked: ' + ', '.join(f'{stat_label(i)}({format_value(state.values.get(i,0.0))})' for i in sorted(state.unlocked)))
+            print('Generation per tick (unlocked):')
+            for i in sorted(state.unlocked):
+                print(f'  {stat_label(i)}: {format_value(state.generation.get(i,0.0))}')
+            print(f'All x2 purchases: {state.all_x2_purchases} (price {format_value(state.all_x2_price)})')
+            print(f'a x10 purchases: {state.a_x10_purchases} (price {format_value(state.a_x10_price)})')
+            print('Completed challenges: ' + ','.join(str(x) for x in sorted(state.completed_challenges)))
+        elif c == 'tick':
+            n = 1
+            if len(parts) > 1:
+                n = int(parts[1])
+            tick(state, n)
+            print(f'advanced {n} ticks')
+            # optional auto-apply boosts
+            apply_all_boosts(state)
+        elif c == 'unlock':
+            if len(parts) < 2:
+                print('usage: unlock N')
+                continue
+            n = int(parts[1])
+            ok, msg = unlock_stat(state, n)
+            print(msg)
+        elif c == 'unlock_label':
+            if len(parts) < 2:
+                print('usage: unlock_label b')
+                continue
+            pos = label_to_pos(parts[1])
+            if pos is None:
+                print('unknown label')
+                continue
+            ok, msg = unlock_stat(state, pos)
+            print(msg)
+        elif c == 'buy_all_x2':
+            ok, msg = buy_all_x2(state)
+            print(msg)
+        elif c == 'buy_a_x10':
+            ok, msg = buy_a_x10(state)
+            print(msg)
+        elif c == 'challenge':
+            if len(parts) < 2:
+                print('usage: challenge N')
+                continue
+            cid = int(parts[1])
+            ok, msg = enter_challenge(state, cid)
+            print(msg)
+        elif c == 'save':
+            if len(parts) < 2:
+                print('usage: save FILE')
+                continue
+            fname = parts[1]
+            with open(fname, 'w') as f:
+                json.dump(state.__dict__, f, default=list)
+            print('saved')
+        elif c == 'load':
+            if len(parts) < 2:
+                print('usage: load FILE')
+                continue
+            fname = parts[1]
+            if not os.path.exists(fname):
+                print('no such file')
+                continue
+            with open(fname, 'r') as f:
+                data = json.load(f)
+            # naive load - for prototype only
+            state.__dict__.update(data)
+            print('loaded')
+        elif c == 'quit':
+            break
+        else:
+            print('unknown command; type help')
+
+if __name__ == '__main__':
+    main()
