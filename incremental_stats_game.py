@@ -16,7 +16,7 @@ class Game:
         self.challenge_active = False
 
     def tick(self):
-        growth = self.stats["a"] * 0.1 * self.all_boost * self.a_boost
+        growth = self.stats["a"] * 2 * self.all_boost * self.a_boost
         self.stats["a"] += growth
         return self.stats["a"]
 
