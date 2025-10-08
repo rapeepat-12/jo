@@ -21,7 +21,7 @@ class Game:
 
         # Each stat grows on its own
         for s in self.unlocked:
-            gains[s] += max(1, self.stats[s] * 0.05)  # base growth per tick
+            gains[s] += max(1, self.stats[s] * 0.1)  # base growth per tick
 
         # Boosting logic (higher stats boost lower ones)
         for i, lower in enumerate(self.unlocked):
