@@ -16,7 +16,7 @@ class Game:
         self.challenge_active = False
 
     # Each tick: every stat generates its own value and boosts lower stats
-    def tick(self):
+    def q(self):
         gains = {k: 0 for k in self.stats}
 
         # Each stat grows on its own
@@ -43,11 +43,11 @@ class Game:
             self.stats[s] += gains[s]
 
         # “a” triples per tick (your rule)
-        self.stats["a"] *= 3 * self.a_boost
+        self.stats["a"] *= 2 * self.a_boost
 
         return self.stats["a"]
 
-    def buy_upgrade(self):
+    def w(self):
         if self.stats["a"] >= self.upgrade_price:
             self.stats["a"] -= self.upgrade_price
             self.all_boost *= 2
@@ -56,7 +56,7 @@ class Game:
         else:
             print("❌ Not enough 'a'!")
 
-    def unlock_next(self):
+    def e(self):
         if self.stats["a"] >= self.unlock_cost:
             self.stats["a"] -= self.unlock_cost
             next_stat = self._next_stat_name(self.unlocked[-1])
@@ -67,7 +67,7 @@ class Game:
         else:
             print(f"❌ Need {self._format(self.unlock_cost)} a to unlock next stat!")
 
-    def _next_stat_name(self, name):
+    def r(self, name):
         alphabet = [chr(i) for i in range(97,123)] + [chr(i) for i in range(65,91)]
         if name not in alphabet:
             prefix, last = name[:-1], name[-1]
@@ -76,7 +76,7 @@ class Game:
             return prefix + alphabet[alphabet.index(last)+1]
         return "aa" if name=="Z" else alphabet[alphabet.index(name)+1]
 
-    def start_challenge(self):
+    def t(self):
         if self.challenge_active:
             print("⚠️ Already in a challenge!")
             return
@@ -102,7 +102,7 @@ class Game:
         self.upgrade_price = 100
         self.unlock_cost = 100
 
-    def show(self):
+    def z(self):
         print("\n📊 --- STATUS ---")
         for s in self.unlocked:
             print(f"{s}: {self._format(self.stats[s])}")
