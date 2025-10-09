@@ -5,26 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Incremental Rebirth Game</title>
 <style>
-  body {
-    margin: 0;
-    font-family: Inter, system-ui, sans-serif;
-    background: #071327;
-    color: #e6eef8;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    min-height: 100vh;
-    padding: 20px;
-  }
-  .wrap {
-    width: 980px;
-    max-width: 95vw;
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-    border-radius: 12px;
-    padding: 18px;
-    box-shadow: 0 8px 40px rgba(2,6,23,0.6);
-  }
-  h1 { margin:0 0 6px 0; font-size: 20px; }
+  body { margin:0; font-family: Inter, system-ui, sans-serif; background:#071327; color:#e6eef8; display:flex; justify-content:center; align-items:flex-start; min-height:100vh; padding:20px;}
+  .wrap { width:980px; max-width:95vw; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:18px; box-shadow:0 8px 40px rgba(2,6,23,0.6);}
+  h1 { margin:0 0 6px 0; font-size:20px; }
   .top { display:flex; gap:12px; }
   .left { width:58%; }
   .right { width:40%; padding-left:14px; border-left:1px solid rgba(255,255,255,0.02);}
@@ -32,15 +15,7 @@
   .stats { max-height:400px; overflow:auto; margin-top:8px;}
   .stat-row { display:flex; justify-content:space-between; padding:4px 0; }
   .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
-  button {
-    background: linear-gradient(180deg,#0b1220,#051026);
-    color: #e6eef8;
-    border:1px solid rgba(255,255,255,0.03);
-    padding:8px 12px;
-    border-radius:8px;
-    cursor:pointer;
-    font-weight:700;
-  }
+  button { background: linear-gradient(180deg,#0b1220,#051026); color:#e6eef8; border:1px solid rgba(255,255,255,0.03); padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:700;}
   button:active { transform:translateY(1px); }
   .msg { font-size:13px; min-height:20px; margin-top:6px; }
   .big { font-size:20px; font-weight:700; margin-top:6px; }
@@ -56,6 +31,7 @@
       <div class="panel">
         <div class="label">Stats</div>
         <div id="statsBox" class="stats"></div>
+        <div class="big">Gain: <span id="aRate">0</span>/s</div>
         <div class="controls">
           <button id="upgradeBtn">All ×2</button>
           <button id="unlockBtn">Unlock Next Stat</button>
@@ -106,7 +82,6 @@ const state={
   unlockCost:100,
   aFlatBase:10,
   aFlatMultiplier:1,
-  bMultiplier:1,
   tiers:[],
   rebirths:0,
   rebirthUnlocked:false,
@@ -132,27 +107,37 @@ function ensureStats(){
 }
 
 /* --- Tick logic --- */
+let lastTime = Date.now();
 function doTick(){
+  const now = Date.now();
+  const delta = (now - lastTime)/1000;
+  lastTime = now;
+
   ensureStats();
 
-  // Flat +10 a per second
-  let aGain=state.aFlatBase*state.aFlatMultiplier;
-  
-  // Rebirth stacked exponent
+  // Base a gain
+  let aGain = state.aFlatBase * state.aFlatMultiplier * delta;
+  state.stats['a'] += aGain;
+
+  // Generate other unlocked stats (fractional relative to a)
+  for(let i=1; i<state.unlocked.length; i++){
+    const s = state.unlocked[i];
+    let baseGain = state.aFlatBase / Math.pow(10, i);
+    state.stats[s] += baseGain * delta;
+  }
+
+  // Apply rebirth exponent to a
   if(state.rebirths>0){
     let exp=1.1;
     for(let i=1;i<state.rebirths;i++) exp=Math.pow(1.1,exp);
-    state.stats['a']=Math.pow(state.stats['a'],exp);
+    state.stats['a'] = Math.pow(state.stats['a'], exp);
   }
-
-  state.stats['a']+=aGain;
 
   // Tier completion
   for(let t of state.tiers){
     if(!t.done && state.stats['a']>=t.target){
       t.done=true;
       state.aFlatMultiplier*=2;
-      state.bMultiplier*=1.5;
       if(t.id===15){
         state.rebirthUnlocked=true;
         state.rebirthFreeAvailable=true;
@@ -203,7 +188,6 @@ function postRebirthReset(){
   state.upgradePrice=100;
   state.unlockCost=100;
   state.aFlatMultiplier=1;
-  state.bMultiplier=1.0;
   state.tiers.forEach(t=>t.done=false);
 }
 
@@ -215,7 +199,6 @@ function resetAll(){
   state.upgradePrice=100;
   state.unlockCost=100;
   state.aFlatMultiplier=1;
-  state.bMultiplier=1;
   state.tiers.forEach(t=>t.done=false);
   state.rebirths=0;
   state.rebirthUnlocked=false;
@@ -227,19 +210,26 @@ function resetAll(){
 /* --- Render UI --- */
 function renderAll(){
   ensureStats();
+
   let html='';
   for(let s of state.unlocked){
     html+=`<div class="stat-row"><div>${s}</div><div>${toXeN(state.stats[s])}</div></div>`;
   }
   document.getElementById('statsBox').innerHTML=html;
+
+  let aPerSecond = state.aFlatBase * state.aFlatMultiplier;
+  document.getElementById('aRate').textContent = toXeN(aPerSecond);
+
   document.getElementById('aValue').textContent=toXeN(state.stats.a);
   document.getElementById('upgradePrice').textContent=toXeN(state.upgradePrice);
   document.getElementById('unlockCost').textContent=toXeN(state.unlockCost);
+
   let thtml='';
   for(let t of state.tiers){
     thtml+=`<div class="tier-row"><div>Tier ${t.id}</div><div>${toXeN(t.target)} ${t.done?'<span style="color:#34d399">✓</span>':''}</div></div>`;
   }
   document.getElementById('tiersBox').innerHTML=thtml;
+
   document.getElementById('rebirthCount').textContent=state.rebirths;
   document.getElementById('rebirthCost').textContent=state.rebirthFreeAvailable?'free (first)':(state.rebirthCost?toXeN(state.rebirthCost):'locked');
 }
@@ -251,7 +241,7 @@ document.getElementById('rebirthBtn').addEventListener('click',doRebirth);
 document.getElementById('resetBtn').addEventListener('click',resetAll);
 
 /* --- Game Loop --- */
-setInterval(doTick,1000);
+setInterval(doTick,50);
 renderAll();
 </script>
 </body>
