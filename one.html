@@ -1,122 +1,437 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Incremental Stats Game</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Incremental Stats Game — Scientific (XeN)</title>
 <style>
-  body { background: #111; color: #eee; font-family: monospace; text-align: center; margin: 0; padding: 20px; }
-  .stat { margin: 10px; padding: 10px; border: 1px solid #444; border-radius: 8px; background: #222; }
-  button { background: #4caf50; border: none; color: white; padding: 10px; cursor: pointer; margin-top: 5px; border-radius: 5px; }
-  button:hover { background: #45a049; }
+  :root{--bg:#071327;--card:#071827;--accent:#60a5fa;--muted:#94a3b8;--ok:#34d399}
+  body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;background:linear-gradient(180deg,#071327 0%, #0b1220 100%);color:#e6eef8;display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .wrap{width:980px;max-width:96vw;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:18px;box-shadow:0 8px 40px rgba(2,6,23,0.6)}
+  h1{margin:0 0 6px 0;font-size:20px}
+  .top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+  .left{width:58%}
+  .right{width:40%;padding-left:14px;border-left:1px solid rgba(255,255,255,0.02)}
+  .stats{background:rgba(255,255,255,0.02);padding:12px;border-radius:8px;max-height:430px;overflow:auto}
+  .stat-row{display:flex;justify-content:space-between;padding:8px;border-bottom:1px dashed rgba(255,255,255,0.02);align-items:center}
+  .small{color:var(--muted);font-size:12px}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  button{background:linear-gradient(180deg,#0b1220,#051026);color:#e6eef8;border:1px solid rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
+  button:active{transform:translateY(1px)}
+  .msg{margin-top:10px;font-size:13px;color:var(--ok);min-height:20px}
+  .panel{background:rgba(255,255,255,0.01);padding:12px;border-radius:8px}
+  .label{font-size:13px;color:var(--muted)}
+  .big{font-size:20px;font-weight:700;margin-top:6px}
+  .footer{margin-top:12px;color:var(--muted);font-size:12px;text-align:right}
+  .badge{display:inline-block;padding:6px 8px;border-radius:6px;background:rgba(96,165,250,0.06);color:var(--accent);font-weight:700}
+  .stat-name{font-weight:700}
+  .stat-value{font-family:monospace}
+  .tier-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.02)}
 </style>
 </head>
 <body>
-<h1>Incremental Stats Game</h1>
-<div id="stats"></div>
-<div id="upgrades"></div>
+<div class="wrap" role="application" aria-label="Incremental Stats Game">
+  <div class="top">
+    <div class="left">
+      <h1>Incremental Stats Game — Scientific (XeN)</h1>
+      <div class="small">Numbers: <code>XeN</code> (coefficient ×10^N). Boosts: near (d≤5) → add hVal × (2×d), far (d>5) → add hVal × 2. a is ×3 per second. No exponents.</div>
+      <div style="height:12px"></div>
+
+      <div class="panel">
+        <div class="label">Current Stats</div>
+        <div id="statsBox" class="stats" aria-live="polite"></div>
+
+        <div class="controls" style="margin-top:12px">
+          <button id="upgradeBtn">Buy All ×2 (price)</button>
+          <button id="unlockBtn">Unlock Next Stat (price)</button>
+          <button id="challengeBtn">Enter Challenge (Tier)</button>
+          <button id="completeBtn">Force-Complete (debug)</button>
+          <button id="rebirthBtn">Rebirth (if unlocked)</button>
+        </div>
+
+        <div id="message" class="msg"></div>
+      </div>
+
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <div class="label">Quick info</div>
+        <div class="big badge" id="aValue">a: 0e0</div>
+        <div style="height:8px"></div>
+        <div class="small">All ×2 price: <b id="upgradePrice">0e0</b></div>
+        <div class="small">Next unlock cost: <b id="unlockCost">0e0</b></div>
+        <div style="height:8px"></div>
+        <div class="small">Challenge state: <b id="challengeState">None</b></div>
+        <div style="height:8px"></div>
+        <div class="small">Tier progress: <div id="tierInfo"></div></div>
+        <div style="height:8px"></div>
+        <div class="small">Rebirths: <b id="rebirthCount">0</b></div>
+        <div class="small">Next rebirth cost: <b id="rebirthCost">locked</b></div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="panel">
+        <div class="label">Controls help</div>
+        <div class="small" style="margin-top:8px">
+          • Game auto-ticks every 1s (no manual tick).<br>
+          • Enter Challenge: you get a debuff (stats → 10%) and must reach the tier 'a' target to complete. Tier rewards stack.<br>
+          • Complete Tier 15 → unlock Rebirth (first rebirth free). Subsequent rebirths require huge a (exponent 2.5 growth).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">Autosave in local browser storage. Copy this file to host anywhere.</div>
+</div>
 
 <script>
-const game = {
-  stats: {},
-  unlocked: ['a'],
-  baseGain: 10,
-  upgradeMultiplier: 1,
-  upgradeCost: 100,
+/* ---------- Game implementation ---------- */
+
+/* Utilities: scientific format "XeN" */
+function toXeN(x) {
+  if (!isFinite(x)) return '∞';
+  if (x === 0) return '0e0';
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const e = Math.floor(Math.log10(x));
+  const coeff = x / Math.pow(10, e);
+  // format coefficient to 3 decimals (trim trailing zeros)
+  const c = Math.round(coeff * 1000) / 1000;
+  return (sign < 0 ? '-' : '') + (c) + 'e' + e;
+}
+
+/* stat label generator */
+const lower = 'abcdefghijklmnopqrstuvwxyz';
+const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+function statLabel(index1based) {
+  if (index1based <= 26) return lower[index1based - 1];
+  if (index1based <= 52) return upper[index1based - 27];
+  // beyond: two-letter base-52
+  const alpha = lower + upper;
+  let i = index1based - 53; // zero-based
+  const first = Math.floor(i / 52);
+  const second = i % 52;
+  return alpha[first] + alpha[second];
+}
+
+/* Game state */
+const state = {
+  stats: { a: 10.0 },          // values
+  unlocked: ['a'],             // ordered unlocked labels
+  allMult: 1.0,                // all×2 purchases multiplier
+  upgradePrice: 100.0,
+  unlockCost: 100.0,
+  // tier/challenge system
+  tiers: [],                   // will hold tier targets & completion flags
+  currentTier: 0,              // 0 = none active, otherwise 1..15
+  tierActive: false,
+  tierDebuffed: false,
+  aMultiplierFromTiers: 1.0,   // cumulative a multiplier from completed tiers (times2 each)
+  bMultiplierFromTiers: 1.0,   // cumulative b multiplier from completed tiers (times1.5 each)
+  // rebirths
+  rebirths: 0,
+  rebirthUnlocked: false,
+  rebirthCost: null,           // numeric, grows by ^2.5 after first free rebirth
+  rebirthFreeAvailable: false
 };
 
-// Correct suffix list
-function formatNumber(n) {
-  if (!isFinite(n)) return '∞';
-  if (n < 1000) return (Math.round(n * 100) / 100).toString();
-  const suffixes = ['', 'K','M','B','T','Qd','Qn','Sx','Sp','Oc','No','De','Vt','Tg','qg','Qg','sg','Sg','Og','Ng','Ce'];
-  const exp = Math.min(Math.floor(Math.log10(n) / 3), suffixes.length - 1);
-  const mant = n / Math.pow(10, exp * 3);
-  return (Math.round(mant * 100) / 100) + suffixes[exp];
+/* Initialize tier targets: tier1 = 1e6, tier_n = (tier_{n-1})^2 for n>=2 */
+function initTiers() {
+  state.tiers = [];
+  let t = 1e6;
+  for (let i = 1; i <= 15; i++) {
+    state.tiers.push({ id: i, target: t, done: false });
+    t = Math.pow(t, 2); // next = previous^2
+    if (!isFinite(t) || t > 1e308) t = 1e308; // cap
+  }
+}
+initTiers();
+
+/* Ensure unlocked stats exist in state.stats */
+function ensureStats() {
+  for (let i = 0; i < state.unlocked.length; i++) {
+    const s = state.unlocked[i];
+    if (!(s in state.stats)) state.stats[s] = 10.0;
+  }
 }
 
-// Generate next stat label (a→b→...→z→A→B→...→Z→aa→ab…)
-function nextStatLabel(current) {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  function increment(label) {
-    let i = label.length - 1;
-    while (i >= 0) {
-      const idx = chars.indexOf(label[i]);
-      if (idx + 1 < chars.length) {
-        return label.substring(0, i) + chars[idx + 1] + label.substring(i + 1);
+/* Auto-tick: runs once per second */
+function doTick() {
+  ensureStats();
+  // compute deltas
+  const deltas = {};
+  for (const k of Object.keys(state.stats)) deltas[k] = 0;
+
+  // base growth per stat (small)
+  for (const s of state.unlocked) {
+    const val = state.stats[s];
+    deltas[s] += Math.max(1, val * 0.05) * state.allMult;
+  }
+
+  // higher stats boost lower ones
+  for (let i = 0; i < state.unlocked.length; i++) {
+    const lowerLabel = state.unlocked[i];
+    for (let j = i + 1; j < state.unlocked.length; j++) {
+      const higherLabel = state.unlocked[j];
+      const distance = j - i;
+      const hVal = state.stats[higherLabel];
+      if (!isFinite(hVal) || hVal <= 0) continue;
+      if (distance >= 1 && distance <= 5) {
+        // add hVal * (2 * distance)
+        deltas[lowerLabel] += hVal * (2 * distance) * state.allMult;
+      } else {
+        // far: flat 2× style
+        deltas[lowerLabel] += hVal * 2 * state.allMult;
       }
-      label = label.substring(0, i) + chars[0] + label.substring(i + 1);
-      i--;
     }
-    return chars[0] + label;
   }
-  return increment(current);
-}
 
-// Calculate required a to unlock next stat
-function costToUnlock(stat) {
-  const idx = Object.keys(game.stats).length;
-  return Math.pow(10, idx * 3 + 3);
-}
-
-// Gain function
-function gainStat(stat, amount) {
-  game.stats[stat] = (game.stats[stat] || 0) + amount;
-}
-
-// Update display
-function updateDisplay() {
-  const container = document.getElementById('stats');
-  container.innerHTML = '';
-  game.unlocked.forEach(stat => {
-    const div = document.createElement('div');
-    div.className = 'stat';
-    div.innerHTML = `
-      <b>${stat}</b>: ${formatNumber(game.stats[stat] || 0)}<br>
-      <button onclick="gainStat('${stat}', game.baseGain * game.upgradeMultiplier)">Gain ${stat}</button>
-    `;
-    container.appendChild(div);
-  });
-
-  // Upgrade section
-  const upgrades = document.getElementById('upgrades');
-  upgrades.innerHTML = `
-    <button onclick="buyUpgrade()">Buy Upgrade (x2 all) Cost: ${formatNumber(game.upgradeCost)} a</button><br>
-    <button onclick="unlockNextStat()">Unlock Next Stat</button>
-  `;
-}
-
-// Upgrade
-function buyUpgrade() {
-  if ((game.stats['a'] || 0) >= game.upgradeCost) {
-    game.stats['a'] -= game.upgradeCost;
-    game.upgradeMultiplier *= 2;
-    game.upgradeCost *= 10;
+  // apply deltas
+  for (const s of Object.keys(deltas)) {
+    const nv = state.stats[s] + deltas[s];
+    state.stats[s] = (!isFinite(nv) || nv > 1e308) ? 1e308 : nv;
   }
-}
 
-// Unlock
-function unlockNextStat() {
-  const last = game.unlocked[game.unlocked.length - 1];
-  const next = nextStatLabel(last);
-  const cost = costToUnlock(next);
-  if ((game.stats['a'] || 0) >= cost) {
-    game.stats['a'] -= cost;
-    game.unlocked.push(next);
-    game.stats[next] = 0;
+  // a multiplies by 3 each tick, also apply tier/rebirth multipliers
+  let a = state.stats['a'] || 0;
+  a = Math.min(a * 3, 1e308);
+  // apply tier multipliers (from completed tiers)
+  a *= state.aMultiplierFromTiers;
+  // apply rebirth boosts for stats up to rebirths*11
+  if (state.rebirths > 0) {
+    const limit = state.rebirths * 11;
+    // if 'a' is in that range? a is index 1, always included if limit >=1
+    if (limit >= 1) {
+      // total rebirth multiplier for 'a' = (1.1 ^ rebirths)
+      a *= Math.pow(1.1, state.rebirths);
+    }
   }
+  state.stats['a'] = Math.min(a, 1e308);
+
+  // apply rebirth multipliers to other stats if within limit
+  if (state.rebirths > 0) {
+    const limit = state.rebirths * 11;
+    for (let idx = 1; idx <= limit && idx <= state.unlocked.length; idx++) {
+      const label = state.unlocked[idx - 1];
+      // apply permanent gain multiplier by scaling current value slightly (keeps it simple)
+      state.stats[label] = Math.min(state.stats[label] * Math.pow(1.1, state.rebirths), 1e308);
+    }
+  }
+
+  // If a challenge/tier is active, check completion condition automatically
+  if (state.tierActive && state.currentTier >= 1 && state.currentTier <= 15) {
+    const tierObj = state.tiers[state.currentTier - 1];
+    if ((state.stats['a'] || 0) >= tierObj.target) {
+      completeTier(state.currentTier);
+    }
+  }
+
+  saveState();
+  renderAll();
 }
 
-// Automatic gain loop
-setInterval(() => {
-  // Every tick, each stat gains 3× its value (like multiplicative growth)
-  game.unlocked.forEach(stat => {
-    game.stats[stat] = (game.stats[stat] || 0) * 3 + game.baseGain * game.upgradeMultiplier;
-  });
-  updateDisplay();
-}, 1000);
+/* Complete tier n reward logic */
+function completeTier(n) {
+  const tObj = state.tiers[n - 1];
+  if (!tObj || tObj.done) return;
+  tObj.done = true;
+  state.tierActive = false;
+  state.currentTier = 0;
+  state.tierDebuffed = false;
+  // Rewards: a x2 (cumulative), b x1.5 (cumulative)
+  state.aMultiplierFromTiers *= 2;
+  state.bMultiplierFromTiers *= 1.5;
+  message(`Tier ${n} completed! a×2 applied (cumulative). b×1.5 applied (cumulative).`, 'ok');
 
-updateDisplay();
+  // if tier 15 completed => unlock rebirth (first rebirth free)
+  if (n === 15) {
+    state.rebirthUnlocked = true;
+    state.rebirthFreeAvailable = true;
+    // initial rebirth cost equals tier15 target (but first rebirth free)
+    state.rebirthCost = tObj.target;
+    message('Tier 15 completed: Rebirth unlocked (first rebirth free).', 'ok');
+  }
+  renderAll();
+}
+
+/* Enter a tier (challenge) */
+function enterTier(n) {
+  if (n < 1 || n > 15) return;
+  if (state.tierActive) {
+    message('Already in a tier/challenge. Complete it first.', 'warn');
+    return;
+  }
+  const tObj = state.tiers[n - 1];
+  if (!tObj) return;
+  // Apply debuff: reduce all unlocked stats to 10% (simulating harsh challenge)
+  for (const s of state.unlocked) state.stats[s] = state.stats[s] * 0.10;
+  state.tierActive = true;
+  state.currentTier = n;
+  state.tierDebuffed = true;
+  message(`Entered Tier ${n}. Stats debuffed to 10%. Reach a ≥ ${toXeN(tObj.target)} to auto-complete.`, 'ok');
+  renderAll();
+}
+
+/* Rebirth action */
+function doRebirth() {
+  if (!state.rebirthUnlocked) {
+    message('Rebirth locked: Complete Tier 15 first.', 'warn'); return;
+  }
+  if (state.rebirthFreeAvailable) {
+    // apply free rebirth
+    state.rebirths += 1;
+    state.rebirthFreeAvailable = false;
+    // reset everything except rebirth count and rebirth multipliers
+    resetProgressAfterRebirth();
+    message('First rebirth completed for free. Permanent boosts applied.', 'ok');
+    renderAll();
+    return;
+  }
+  // otherwise require cost
+  if (!state.rebirthCost) {
+    message('No rebirth cost computed.', 'warn'); return;
+  }
+  if ((state.stats['a'] || 0) < state.rebirthCost) {
+    message(`Need ${toXeN(state.rebirthCost)} a to rebirth.`, 'warn'); return;
+  }
+  // pay cost and rebirth
+  state.stats['a'] -= state.rebirthCost;
+  state.rebirths += 1;
+  // next rebirth cost = (prev) ^ 2.5 (cap to huge)
+  let next = Math.pow(state.rebirthCost, 2.5);
+  if (!isFinite(next) || next > 1e308) next = 1e308;
+  state.rebirthCost = next;
+  resetProgressAfterRebirth();
+  message('Rebirth complete. Permanent boosts applied.', 'ok');
+  renderAll();
+}
+
+function resetProgressAfterRebirth() {
+  // keep rebirth count, rebirthCost, but reset everything else
+  state.stats = { a: 10.0 };
+  state.unlocked = ['a'];
+  state.allMult = 1.0;
+  state.upgradePrice = 100.0;
+  state.unlockCost = 100.0;
+  state.tiers.forEach(t=>t.done=false);
+  state.currentTier = 0;
+  state.tierActive = false;
+  state.tierDebuffed = false;
+  state.aMultiplierFromTiers = 1.0;
+  state.bMultiplierFromTiers = 1.0;
+  // rebirth boosts persist (they are applied on ticks via state.rebirths)
+}
+
+/* UI and interaction */
+const statsBox = document.getElementById('statsBox');
+const messageEl = document.getElementById('message');
+const aValueEl = document.getElementById('aValue');
+const upgradePriceEl = document.getElementById('upgradePrice');
+const unlockCostEl = document.getElementById('unlockCost');
+const challengeStateEl = document.getElementById('challengeState');
+const tierInfoEl = document.getElementById('tierInfo');
+const rebirthCountEl = document.getElementById('rebirthCount');
+const rebirthCostEl = document.getElementById('rebirthCost');
+
+function renderAll() {
+  ensureStats();
+  // stats list
+  let html = '';
+  for (let i = 0; i < state.unlocked.length; i++) {
+    const s = state.unlocked[i];
+    html += `<div class="stat-row"><div class="stat-name">${s}</div><div class="stat-value">${toXeN(state.stats[s])}</div></div>`;
+  }
+  statsBox.innerHTML = html;
+  aValueEl.textContent = 'a: ' + toXeN(state.stats.a || 0);
+  upgradePriceEl.textContent = toXeN(state.upgradePrice || 0);
+  unlockCostEl.textContent = toXeN(state.unlockCost || 0);
+  challengeStateEl.textContent = state.tierActive ? `Tier ${state.currentTier} (active)` : 'None';
+  // tier info: show next incomplete tier
+  const nextTier = state.tiers.find(t=>!t.done);
+  if (nextTier) {
+    tierInfoEl.textContent = `Next incomplete tier: ${nextTier.id} target ${toXeN(nextTier.target)}`;
+  } else {
+    tierInfoEl.textContent = 'All tiers completed';
+  }
+  rebirthCountEl.textContent = state.rebirths;
+  rebirthCostEl.textContent = state.rebirthFreeAvailable ? 'free (first available)' : (state.rebirthCost ? toXeN(state.rebirthCost) : 'locked');
+}
+
+/* Buttons wiring */
+document.getElementById('upgradeBtn').addEventListener('click', ()=>{
+  if ((state.stats.a || 0) >= state.upgradePrice) {
+    state.stats.a -= state.upgradePrice;
+    state.allMult *= 2;
+    state.upgradePrice *= 10;
+    message('Bought All ×2 upgrade', 'ok');
+  } else message('Not enough a to buy upgrade', 'warn');
+  renderAll();
+});
+document.getElementById('unlockBtn').addEventListener('click', ()=>{
+  const cost = state.unlockCost;
+  if ((state.stats.a || 0) >= cost) {
+    state.stats.a -= cost;
+    const nextIndex = state.unlocked.length + 1;
+    const label = statLabel(nextIndex);
+    state.unlocked.push(label);
+    state.stats[label] = 10.0;
+    state.unlockCost *= 10;
+    message(`Unlocked ${label}`, 'ok');
+  } else message(`Need ${toXeN(cost)} a to unlock`, 'warn');
+  renderAll();
+});
+document.getElementById('challengeBtn').addEventListener('click', ()=>{
+  // open dialog to pick tier (we'll pick next incomplete)
+  const next = state.tiers.find(t=>!t.done);
+  if (!next) { message('No more tiers (all completed)', 'ok'); return; }
+  // start that tier
+  enterTier(next.id);
+});
+document.getElementById('completeBtn').addEventListener('click', ()=>{
+  // debug: force complete current tier if active
+  if (state.tierActive && state.currentTier>0) {
+    completeTier(state.currentTier);
+  } else message('No active tier to complete', 'warn');
+});
+document.getElementById('rebirthBtn').addEventListener('click', ()=>{
+  doRebirth();
+});
+
+/* messages */
+let msgTimer = null;
+function message(txt, type='ok') {
+  messageEl.style.color = type === 'ok' ? 'var(--ok)' : (type === 'warn' ? '#f59e0b' : '#f87171');
+  messageEl.textContent = txt;
+  if (msgTimer) clearTimeout(msgTimer);
+  msgTimer = setTimeout(()=>{ messageEl.textContent = ''; }, 6000);
+}
+
+/* Save / load state in localStorage */
+function saveState() {
+  try {
+    const copy = JSON.parse(JSON.stringify(state));
+    localStorage.setItem('inc_game_state_v3', JSON.stringify(copy));
+  } catch(e){ console.warn('save fail', e); }
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem('inc_game_state_v3');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    // shallow assign only known fields
+    Object.assign(state, s);
+  } catch(e){ console.warn('load fail', e); }
+}
+loadState();
+renderAll();
+
+/* auto tick every 1s */
+setInterval(doTick, 1000);
+
+/* save periodically */
+setInterval(saveState, 3000);
 </script>
 </body>
 </html>
