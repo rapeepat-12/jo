@@ -1,370 +1,122 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Incremental Stats Game (HTML)</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Incremental Stats Game</title>
 <style>
-  :root{--bg:#0f1724;--card:#0b1220;--accent:#60a5fa;--muted:#94a3b8;--ok:#34d399}
-  body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;background:linear-gradient(180deg,#071327 0%, #0b1220 100%);color:#e6eef8;display:flex;align-items:center;justify-content:center;height:100vh}
-  .wrap{width:980px;max-width:96vw;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:18px;box-shadow:0 8px 40px rgba(2,6,23,0.6)}
-  h1{margin:0 0 6px 0;font-size:20px}
-  .top{display:flex;gap:12px;align-items:center;justify-content:space-between}
-  .left{width:54%}
-  .right{width:42%;padding-left:12px;border-left:1px solid rgba(255,255,255,0.02)}
-  .stats{background:rgba(255,255,255,0.02);padding:12px;border-radius:8px;max-height:360px;overflow:auto}
-  .stat-row{display:flex;justify-content:space-between;padding:6px 4px;border-bottom:1px dashed rgba(255,255,255,0.02)}
-  .small{color:var(--muted);font-size:12px}
-  .controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-  button{background:linear-gradient(180deg,#0b1220,#051026);color:#e6eef8;border:1px solid rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
-  button:active{transform:translateY(1px)}
-  .msg{margin-top:10px;font-size:13px;color:var(--ok)}
-  .panel{background:rgba(255,255,255,0.01);padding:12px;border-radius:8px}
-  .label{font-size:13px;color:var(--muted)}
-  .big{font-size:20px;font-weight:700;margin-top:6px}
-  .footer{margin-top:12px;color:var(--muted);font-size:12px;text-align:right}
-  .badge{display:inline-block;padding:6px 8px;border-radius:6px;background:rgba(96,165,250,0.08);color:var(--accent);font-weight:700}
+  body { background: #111; color: #eee; font-family: monospace; text-align: center; margin: 0; padding: 20px; }
+  .stat { margin: 10px; padding: 10px; border: 1px solid #444; border-radius: 8px; background: #222; }
+  button { background: #4caf50; border: none; color: white; padding: 10px; cursor: pointer; margin-top: 5px; border-radius: 5px; }
+  button:hover { background: #45a049; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="top">
-    <div class="left">
-      <h1>Incremental Stats Game — HTML</h1>
-      <div class="small">Click buttons or let it auto-tick. Stat naming follows a→b→c… and higher stats boost lower ones.</div>
-
-      <div style="height:12px"></div>
-
-      <div class="panel">
-        <div class="label">Current Stats</div>
-        <div id="statsBox" class="stats" aria-live="polite"></div>
-
-        <div class="controls">
-          <button id="tickBtn">Tick</button>
-          <button id="upgradeBtn">Buy ×2 (All)</button>
-          <button id="unlockBtn">Unlock Next Stat</button>
-          <button id="challengeBtn">Start Challenge</button>
-          <button id="completeBtn">Complete Challenge</button>
-          <button id="resetBtn">Reset Game</button>
-        </div>
-
-        <div id="message" class="msg"></div>
-      </div>
-    </div>
-
-    <div class="right">
-      <div class="panel">
-        <div class="label">Quick info</div>
-        <div class="big badge" id="aValue">a: 0</div>
-        <div style="height:8px"></div>
-        <div class="small">Upgrade (all ×2) price: <b id="upgradePrice">0</b></div>
-        <div class="small">Next unlock cost: <b id="unlockCost">0</b></div>
-        <div style="height:8px"></div>
-        <div class="small">Challenge: <span id="challengeState">None</span></div>
-        <div style="height:8px"></div>
-        <div><label><input type="checkbox" id="autoTick" checked/> Auto-tick every 1s</label></div>
-        <div style="height:8px"></div>
-        <div class="small">Tick speed (ms): <input id="tickSpeed" type="number" value="1000" min="250" step="250" style="width:100px"/></div>
-      </div>
-
-      <div style="height:12px"></div>
-
-      <div class="panel">
-        <div class="label">Controls help</div>
-        <div class="small" style="margin-top:8px">
-          • <b>Tick</b> runs a single tick (triples a + stat boosts).<br>
-          • <b>Buy ×2 (All)</b> doubles generation (price ×10 each buy).<br>
-          • <b>Unlock Next Stat</b> spends a to unlock the next stat (starts generating immediately).<br>
-          • <b>Start Challenge</b> resets progress to a but gives stronger rewards on completion.<br>
-          • <b>Complete Challenge</b> claim challenge reward if active.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="footer">Saved as local browser session (not uploaded). You can copy this file and host anywhere.</div>
-</div>
+<h1>Incremental Stats Game</h1>
+<div id="stats"></div>
+<div id="upgrades"></div>
 
 <script>
-/*
-  Incremental Stats Game — HTML single-file version
-  - Every tick triples 'a' (a = a * 3)
-  - Unlocked stats auto-generate each tick and boost lower stats.
-  - Unlock cost starts at 100 a and multiplies by 10.
-  - Buy All ×2 upgrade price starts at 100 a and multiplies by 10.
-  - Simple formatting for large numbers.
-*/
+const game = {
+  stats: {},
+  unlocked: ['a'],
+  baseGain: 10,
+  upgradeMultiplier: 1,
+  upgradeCost: 100,
+};
 
-// ---------- Utilities ----------
+// Correct suffix list
 function formatNumber(n) {
   if (!isFinite(n)) return '∞';
   if (n < 1000) return (Math.round(n * 100) / 100).toString();
-
-  const suffixes = [
-    '', 'K','M','B','T','Qd','Qn','Sx','Sp','Oc','No','De',
-    'Vt','Tg','qg','Qg','sg','Sg','Og','Ng','Ce'
-  ];
-
+  const suffixes = ['', 'K','M','B','T','Qd','Qn','Sx','Sp','Oc','No','De','Vt','Tg','qg','Qg','sg','Sg','Og','Ng','Ce'];
   const exp = Math.min(Math.floor(Math.log10(n) / 3), suffixes.length - 1);
   const mant = n / Math.pow(10, exp * 3);
   return (Math.round(mant * 100) / 100) + suffixes[exp];
 }
 
-
-// generate stat label: 1->a,2->b,...26->z,27->A,...52->Z,53->aa...
-function statLabel(index) {
-  // index is 1-based
-  const lower = 'abcdefghijklmnopqrstuvwxyz';
-  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  if (index <= 26) return lower[index-1];
-  if (index <= 52) return upper[index-27];
-  // for indexes > 52, produce pairs using combined alphabet (52 chars)
-  const alpha = lower + upper;
-  let i = index - 53; // zero-based
-  const first = Math.floor(i / 52);
-  const second = i % 52;
-  return alpha[first] + alpha[second];
-}
-
-// ---------- Game state ----------
-const game = {
-  stats: { a: 10 },          // starting a value
-  unlocked: ['a'],           // unlocked stat labels in order
-  generation: {},            // optional per-stat generation base (not required here)
-  allBoostMult: 1,           // "all x2" purchases multiply this
-  allUpgradePrice: 100,      // price for all x2 (multiplies by 10 each purchase)
-  unlockCost: 100,           // initial unlock cost for b
-  challengeActive: false,
-  challengeLevel: 0,
-  aBoostMult: 1              // prestige-like a x10 multiplier (applied multiplicatively)
-};
-
-// ensure every unlocked stat has a numeric value
-function ensureStats() {
-  for (const s of game.unlocked) {
-    if (!(s in game.stats)) game.stats[s] = 10; // newly unlocked start value
-  }
-}
-ensureStats();
-
-// ---------- Core tick logic ----------
-function doTick() {
-  ensureStats();
-  // Step 1: compute base gains for each stat (we'll accumulate deltas)
-  const deltas = {};
-  for (const s of game.unlocked) deltas[s] = 0;
-
-  // Base self-growth per stat: use small growth so higher stats still matter
-  for (const s of game.unlocked) {
-    const val = game.stats[s];
-    // base growth: max(1, 5% of stat value)
-    deltas[s] += Math.max(1, val * 0.05);
-  }
-
-  // Step 2: higher stats boost lower stats
-  // unlocked array is ordered: index 0 -> 'a', index 1 -> 'b', etc.
-  for (let i = 0; i < game.unlocked.length; i++) {
-    const lower = game.unlocked[i];
-    for (let j = i + 1; j < game.unlocked.length; j++) {
-      const higher = game.unlocked[j];
-      const distance = j - i; // 1-based distance
-      const hVal = game.stats[higher];
-
-      if (hVal <= 0) continue;
-      if (distance >= 1 && distance <= 5) {
-        // multiplicative-ish boost: add hVal * (5 * distance) scaled by allBoostMult
-        deltas[lower] += hVal * (5 * distance) * game.allBoostMult;
-      } else {
-        // exponential long-distance boost: use controlled exponent
-        let exp = distance - 5; // base exponent
-        // scale exponent to avoid immediate overflow: if large, use soft log
-        if (exp > 10) exp = 10 + Math.log10(exp);
-        // compute lower^exp but guard against too large numbers
-        const lowerVal = Math.max(1, game.stats[lower]);
-        // use pow with caret; may get huge — cap to Number.MAX_VALUE
-        let add = Math.pow(lowerVal, Math.min(exp, 1024));
-        if (!isFinite(add) || add > Number.MAX_VALUE / 1e6) add = Number.MAX_VALUE;
-        // scale by hVal (so higher stat amount matters)
-        add = add * Math.min(hVal, 1e12); // cap hVal multiplier to keep numbers sane
-        deltas[lower] += add * game.allBoostMult;
+// Generate next stat label (a→b→...→z→A→B→...→Z→aa→ab…)
+function nextStatLabel(current) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  function increment(label) {
+    let i = label.length - 1;
+    while (i >= 0) {
+      const idx = chars.indexOf(label[i]);
+      if (idx + 1 < chars.length) {
+        return label.substring(0, i) + chars[idx + 1] + label.substring(i + 1);
       }
+      label = label.substring(0, i) + chars[0] + label.substring(i + 1);
+      i--;
     }
+    return chars[0] + label;
   }
-
-  // Step 3: apply deltas
-  for (const s in deltas) {
-    // try to avoid exact Infinity; cap high values
-    const newVal = game.stats[s] + deltas[s];
-    game.stats[s] = (!isFinite(newVal) || newVal > 1e308) ? 1e308 : newVal;
-  }
-
-  // Step 4: triple a (with aBoostMult)
-  game.stats.a = Math.min(game.stats.a * 3 * game.aBoostMult, 1e308);
-
-  renderAll();
+  return increment(current);
 }
 
-// ---------- UI wiring ----------
-const statsBox = document.getElementById('statsBox');
-const messageEl = document.getElementById('message');
-const aValueEl = document.getElementById('aValue');
-const upgradePriceEl = document.getElementById('upgradePrice');
-const unlockCostEl = document.getElementById('unlockCost');
-const challengeStateEl = document.getElementById('challengeState');
-
-function renderAll() {
-  ensureStats();
-  // build stats HTML (show unlocked in order)
-  let html = '';
-  for (const s of game.unlocked) {
-    html += `<div class="stat-row"><div>${s}</div><div>${formatNumber(game.stats[s])}</div></div>`;
-  }
-  statsBox.innerHTML = html;
-
-  aValueEl.textContent = 'a: ' + formatNumber(game.stats.a);
-  upgradePriceEl.textContent = formatNumber(game.allUpgradePrice);
-  unlockCostEl.textContent = formatNumber(game.unlockCost);
-  challengeStateEl.textContent = game.challengeActive ? `Active (Lv ${game.challengeLevel})` : 'None';
+// Calculate required a to unlock next stat
+function costToUnlock(stat) {
+  const idx = Object.keys(game.stats).length;
+  return Math.pow(10, idx * 3 + 3);
 }
 
-function showMessage(msg, color = '#34d399') {
-  messageEl.textContent = msg;
-  messageEl.style.color = color;
-  setTimeout(() => {
-    if (messageEl.textContent === msg) messageEl.textContent = '';
-  }, 4000);
+// Gain function
+function gainStat(stat, amount) {
+  game.stats[stat] = (game.stats[stat] || 0) + amount;
 }
 
-// ---------- button handlers ----------
-document.getElementById('tickBtn').addEventListener('click', () => {
-  doTick();
-  showMessage('Manual tick executed');
-});
-document.getElementById('upgradeBtn').addEventListener('click', () => {
-  if (game.stats.a >= game.allUpgradePrice) {
-    game.stats.a -= game.allUpgradePrice;
-    game.allBoostMult *= 2;
-    game.allUpgradePrice *= 10;
-    showMessage('Bought All ×2 upgrade');
-  } else showMessage('Not enough a for upgrade', '#f87171');
-  renderAll();
-});
-document.getElementById('unlockBtn').addEventListener('click', () => {
-  if (game.stats.a >= game.unlockCost) {
-    game.stats.a -= game.unlockCost;
-    const nextIndex = game.unlocked.length + 1; // 1-based index
-    const label = statLabel(nextIndex);
-    game.unlocked.push(label);
-    game.stats[label] = 10; // start value
-    game.unlockCost *= 10;
-    showMessage(`Unlocked ${label} — it now generates`);
-  } else {
-    showMessage(`Need ${formatNumber(game.unlockCost)} a to unlock`, '#f87171');
-  }
-  renderAll();
-});
-document.getElementById('challengeBtn').addEventListener('click', () => {
-  if (game.challengeActive) {
-    showMessage('Already in a challenge', '#fbbf24');
-    return;
-  }
-  // start challenge: reset progress up to 'A' equivalent (we'll reset all except stats beyond pos 27)
-  game.challengeActive = true;
-  game.challengeLevel++;
-  // We'll reset all stats and unlocked to just 'a' — user asked earlier to reset up to A
-  game.stats = { a: 10 };
-  game.unlocked = ['a'];
-  game.allBoostMult = 1;
-  game.allUpgradePrice = 100;
-  game.unlockCost = 100;
-  showMessage(`Challenge ${game.challengeLevel} started — progress reset`);
-  renderAll();
-});
-document.getElementById('completeBtn').addEventListener('click', () => {
-  if (!game.challengeActive) {
-    showMessage('No active challenge', '#f87171');
-    return;
-  }
-  // reward: multiply a boost and give some a
-  const rewardFactor = 1 + (game.challengeLevel * 0.5);
-  game.aBoostMult *= rewardFactor;
-  game.stats.a += 100 * game.challengeLevel; // small immediate grant
-  game.challengeActive = false;
-  showMessage(`Challenge complete: a boost ×${rewardFactor.toFixed(2)}`);
-  renderAll();
-});
-document.getElementById('resetBtn').addEventListener('click', () => {
-  if (!confirm('Reset the entire game (clear progress)?')) return;
-  game.stats = { a: 10 };
-  game.unlocked = ['a'];
-  game.allBoostMult = 1;
-  game.allUpgradePrice = 100;
-  game.unlockCost = 100;
-  game.challengeActive = false;
-  game.challengeLevel = 0;
-  game.aBoostMult = 1;
-  renderAll();
-  showMessage('Game reset');
-});
+// Update display
+function updateDisplay() {
+  const container = document.getElementById('stats');
+  container.innerHTML = '';
+  game.unlocked.forEach(stat => {
+    const div = document.createElement('div');
+    div.className = 'stat';
+    div.innerHTML = `
+      <b>${stat}</b>: ${formatNumber(game.stats[stat] || 0)}<br>
+      <button onclick="gainStat('${stat}', game.baseGain * game.upgradeMultiplier)">Gain ${stat}</button>
+    `;
+    container.appendChild(div);
+  });
 
-// ---------- autosave to localStorage ----------
-function saveState() {
-  try {
-    const state = {
-      stats: game.stats,
-      unlocked: game.unlocked,
-      allBoostMult: game.allBoostMult,
-      allUpgradePrice: game.allUpgradePrice,
-      unlockCost: game.unlockCost,
-      challengeActive: game.challengeActive,
-      challengeLevel: game.challengeLevel,
-      aBoostMult: game.aBoostMult
-    };
-    localStorage.setItem('inc_stats_game_v1', JSON.stringify(state));
-  } catch (e) {
-    console.warn('Save failed', e);
+  // Upgrade section
+  const upgrades = document.getElementById('upgrades');
+  upgrades.innerHTML = `
+    <button onclick="buyUpgrade()">Buy Upgrade (x2 all) Cost: ${formatNumber(game.upgradeCost)} a</button><br>
+    <button onclick="unlockNextStat()">Unlock Next Stat</button>
+  `;
+}
+
+// Upgrade
+function buyUpgrade() {
+  if ((game.stats['a'] || 0) >= game.upgradeCost) {
+    game.stats['a'] -= game.upgradeCost;
+    game.upgradeMultiplier *= 2;
+    game.upgradeCost *= 10;
   }
 }
-function loadState() {
-  try {
-    const raw = localStorage.getItem('inc_stats_game_v1');
-    if (!raw) return;
-    const st = JSON.parse(raw);
-    Object.assign(game, st);
-  } catch (e) {
-    console.warn('Load failed', e);
+
+// Unlock
+function unlockNextStat() {
+  const last = game.unlocked[game.unlocked.length - 1];
+  const next = nextStatLabel(last);
+  const cost = costToUnlock(next);
+  if ((game.stats['a'] || 0) >= cost) {
+    game.stats['a'] -= cost;
+    game.unlocked.push(next);
+    game.stats[next] = 0;
   }
 }
-loadState();
-renderAll();
 
-// ---------- auto tick loop ----------
-let tickTimer = null;
-function setAutoTick() {
-  // clear existing
-  if (tickTimer) clearInterval(tickTimer);
-  const enabled = document.getElementById('autoTick').checked;
-  const ms = Math.max(250, Number(document.getElementById('tickSpeed').value) || 1000);
-  if (enabled) {
-    tickTimer = setInterval(() => {
-      try {
-        doTick();
-        saveState();
-      } catch (err) {
-        console.error(err);
-      }
-    }, ms);
-  }
-}
-document.getElementById('autoTick').addEventListener('change', setAutoTick);
-document.getElementById('tickSpeed').addEventListener('change', () => {
-  setAutoTick();
-});
-setAutoTick();
+// Automatic gain loop
+setInterval(() => {
+  // Every tick, each stat gains 3× its value (like multiplicative growth)
+  game.unlocked.forEach(stat => {
+    game.stats[stat] = (game.stats[stat] || 0) * 3 + game.baseGain * game.upgradeMultiplier;
+  });
+  updateDisplay();
+}, 1000);
 
-// autosave periodically
-setInterval(saveState, 3000);
-
+updateDisplay();
 </script>
 </body>
 </html>
