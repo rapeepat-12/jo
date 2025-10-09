@@ -99,11 +99,17 @@
 function formatNumber(n) {
   if (!isFinite(n)) return '∞';
   if (n < 1000) return (Math.round(n * 100) / 100).toString();
-  const suffixes = ['', 'K','M','B','T','Qa','Qi','Sx','Sp','Oc','No','De'];
+
+  const suffixes = [
+    '', 'K','M','B','T','Qd','Qn','Sx','Sp','Oc','No','De',
+    'Vt','Tg','qg','Qg','sg','Sg','Og','Ng','Ce'
+  ];
+
   const exp = Math.min(Math.floor(Math.log10(n) / 3), suffixes.length - 1);
   const mant = n / Math.pow(10, exp * 3);
   return (Math.round(mant * 100) / 100) + suffixes[exp];
 }
+
 
 // generate stat label: 1->a,2->b,...26->z,27->A,...52->Z,53->aa...
 function statLabel(index) {
