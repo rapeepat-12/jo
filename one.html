@@ -220,19 +220,15 @@ function doTick(){
 
   /* Multipliers */
   aVal=BX_mul(aVal,state.aMultiplierFromTiers);
-  if(state.rebirths>0){
-    let r=BX(1.1 ** state.rebirths);
-    aVal=BX_mul(aVal,r);
-  }
   state.stats.a=aVal;
 
-  /* Rebirth multiplier applies to lower stats */
-  if(state.rebirths>0){
-    let limit = state.rebirths*11;
-    let r=BX(1.1 ** state.rebirths);
-    for(let i=0;i<state.unlocked.length && i<limit;i++){
-      let s=state.unlocked[i];
-      state.stats[s]=BX_mul(state.stats[s],r);
+  /* ================================================================
+     REBIRTH MULTIPLIER: All stats ^ (1.5 ^ rebirths)
+     ================================================================ */
+  if(state.rebirths > 0){
+    const exp = 1.5 ** state.rebirths;
+    for(const s of state.unlocked){
+      state.stats[s] = BX_pow(state.stats[s], BX(exp));
     }
   }
 
@@ -342,7 +338,7 @@ function doRebirth(){
 
   state.rebirths++;
 
-  /* New rebirth cost = old^2.5 */
+  /* New rebirth cost = old^1.5 */
   state.rebirthCost = BX_pow(state.rebirthCost,1.5);
 
   resetProgressAfterRebirth();
@@ -351,7 +347,7 @@ function doRebirth(){
 }
 
 /* ================================================================
-   UI
+   UI & BUTTONS
    ================================================================ */
 
 function toXeN(x){ return BX_toString(x); }
@@ -403,10 +399,6 @@ function message(txt,type="ok"){
   if(msgTimer) clearTimeout(msgTimer);
   msgTimer=setTimeout(()=>messageEl.textContent="",6000);
 }
-
-/* ================================================================
-   BUTTONS
-   ================================================================ */
 
 document.getElementById("upgradeBtn").onclick=()=>{
   if(!BX_gte(state.stats.a,state.upgradePrice)){
@@ -461,7 +453,7 @@ document.getElementById("rebirthBtn").onclick=()=>{
 };
 
 /* ================================================================
-   SAVE / LOAD (BigXeN-safe)
+   SAVE / LOAD
    ================================================================ */
 
 function serializeBX(o){ return {c:o.c,e:o.e}; }
