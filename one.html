@@ -144,7 +144,7 @@ function initTiers() {
   for (let i = 1; i <= 15; i++) {
     state.tiers.push({ id: i, target: t, done: false });
     t = Math.pow(t, 2); // next = previous^2
-    if (!isFinite(t) || t > 1e308) t = 1e308; // cap
+    if (!isFinite(t) || t > 1e10000000000000) t = 1e10000000000000; // cap
   }
 }
 initTiers();
