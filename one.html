@@ -343,7 +343,7 @@ function doRebirth(){
   state.rebirths++;
 
   /* New rebirth cost = old^2.5 */
-  state.rebirthCost = BX_pow(state.rebirthCost,2.5);
+  state.rebirthCost = BX_pow(state.rebirthCost,1.5);
 
   resetProgressAfterRebirth();
   message("Rebirth complete!");
