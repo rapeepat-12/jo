@@ -191,12 +191,12 @@ function doTick() {
   // apply deltas
   for (const s of Object.keys(deltas)) {
     const nv = state.stats[s] + deltas[s];
-    state.stats[s] = (!isFinite(nv) || nv > 1e308) ? 1e308 : nv;
+    state.stats[s] = (!isFinite(nv) || nv > 1e10000000000000) ? 1e10000000000000 : nv;
   }
 
   // a multiplies by 3 each tick, also apply tier/rebirth multipliers
   let a = state.stats['a'] || 0;
-  a = Math.min(a * 3, 1e308);
+  a = Math.min(a * 3, 1e10000000000000);
   // apply tier multipliers (from completed tiers)
   a *= state.aMultiplierFromTiers;
   // apply rebirth boosts for stats up to rebirths*11
@@ -208,7 +208,7 @@ function doTick() {
       a *= Math.pow(1.1, state.rebirths);
     }
   }
-  state.stats['a'] = Math.min(a, 1e308);
+  state.stats['a'] = Math.min(a, 1e10000000000000);
 
   // apply rebirth multipliers to other stats if within limit
   if (state.rebirths > 0) {
@@ -301,7 +301,7 @@ function doRebirth() {
   state.rebirths += 1;
   // next rebirth cost = (prev) ^ 2.5 (cap to huge)
   let next = Math.pow(state.rebirthCost, 2.5);
-  if (!isFinite(next) || next > 1e308) next = 1e308;
+  if (!isFinite(next) || next > 1e10000000000000) next = 1e10000000000000;
   state.rebirthCost = next;
   resetProgressAfterRebirth();
   message('Rebirth complete. Permanent boosts applied.', 'ok');
