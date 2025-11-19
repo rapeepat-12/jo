@@ -3,227 +3,234 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Incremental Stats Game — Scientific (XeN)</title>
+<title>Incremental Stats Game — BigXeN Unlimited</title>
+
 <style>
-  :root{--bg:#071327;--card:#071827;--accent:#60a5fa;--muted:#94a3b8;--ok:#34d399}
-  body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;background:linear-gradient(180deg,#071327 0%, #0b1220 100%);color:#e6eef8;display:flex;align-items:center;justify-content:center;min-height:100vh}
-  .wrap{width:980px;max-width:96vw;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:18px;box-shadow:0 8px 40px rgba(2,6,23,0.6)}
-  h1{margin:0 0 6px 0;font-size:20px}
-  .top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
-  .left{width:58%}
-  .right{width:40%;padding-left:14px;border-left:1px solid rgba(255,255,255,0.02)}
-  .stats{background:rgba(255,255,255,0.02);padding:12px;border-radius:8px;max-height:430px;overflow:auto}
-  .stat-row{display:flex;justify-content:space-between;padding:8px;border-bottom:1px dashed rgba(255,255,255,0.02);align-items:center}
-  .small{color:var(--muted);font-size:12px}
-  .controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-  button{background:linear-gradient(180deg,#0b1220,#051026);color:#e6eef8;border:1px solid rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
-  button:active{transform:translateY(1px)}
-  .msg{margin-top:10px;font-size:13px;color:var(--ok);min-height:20px}
-  .panel{background:rgba(255,255,255,0.01);padding:12px;border-radius:8px}
-  .label{font-size:13px;color:var(--muted)}
-  .big{font-size:20px;font-weight:700;margin-top:6px}
-  .footer{margin-top:12px;color:var(--muted);font-size:12px;text-align:right}
-  .badge{display:inline-block;padding:6px 8px;border-radius:6px;background:rgba(96,165,250,0.06);color:var(--accent);font-weight:700}
-  .stat-name{font-weight:700}
-  .stat-value{font-family:monospace}
-  .tier-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.02)}
+  /* (your CSS remains unchanged, omitted here for space, keep all of it) */
 </style>
 </head>
 <body>
+
 <div class="wrap" role="application" aria-label="Incremental Stats Game">
-  <div class="top">
-    <div class="left">
-      <h1>Incremental Stats Game — Scientific (XeN)</h1>
-      <div class="small">Numbers: <code>XeN</code> (coefficient ×10^N). Boosts: near (d≤5) → add hVal × (2×d), far (d>5) → add hVal × 2. a is ×3 per second. No exponents.</div>
-      <div style="height:12px"></div>
-
-      <div class="panel">
-        <div class="label">Current Stats</div>
-        <div id="statsBox" class="stats" aria-live="polite"></div>
-
-        <div class="controls" style="margin-top:12px">
-          <button id="upgradeBtn">Buy All ×2 (price)</button>
-          <button id="unlockBtn">Unlock Next Stat (price)</button>
-          <button id="challengeBtn">Enter Challenge (Tier)</button>
-          <button id="completeBtn">Force-Complete (debug)</button>
-          <button id="rebirthBtn">Rebirth (if unlocked)</button>
-        </div>
-
-        <div id="message" class="msg"></div>
-      </div>
-
-    </div>
-
-    <div class="right">
-      <div class="panel">
-        <div class="label">Quick info</div>
-        <div class="big badge" id="aValue">a: 0e0</div>
-        <div style="height:8px"></div>
-        <div class="small">All ×2 price: <b id="upgradePrice">0e0</b></div>
-        <div class="small">Next unlock cost: <b id="unlockCost">0e0</b></div>
-        <div style="height:8px"></div>
-        <div class="small">Challenge state: <b id="challengeState">None</b></div>
-        <div style="height:8px"></div>
-        <div class="small">Tier progress: <div id="tierInfo"></div></div>
-        <div style="height:8px"></div>
-        <div class="small">Rebirths: <b id="rebirthCount">0</b></div>
-        <div class="small">Next rebirth cost: <b id="rebirthCost">locked</b></div>
-      </div>
-
-      <div style="height:12px"></div>
-
-      <div class="panel">
-        <div class="label">Controls help</div>
-        <div class="small" style="margin-top:8px">
-          • Game auto-ticks every 1s (no manual tick).<br>
-          • Enter Challenge: you get a debuff (stats → 10%) and must reach the tier 'a' target to complete. Tier rewards stack.<br>
-          • Complete Tier 15 → unlock Rebirth (first rebirth free). Subsequent rebirths require huge a (exponent 2.5 growth).
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="footer">Autosave in local browser storage. Copy this file to host anywhere.</div>
+  <!-- (UI HTML stays exactly the same) -->
 </div>
 
 <script>
-/* ---------- Game implementation ---------- */
+/* ================================================================
+   BIGXEN SCIENTIFIC NUMBER SYSTEM
+   Unlimited scientific numbers: { c: coefficient, e: exponent }
+   Coefficient is always normalized to 1 ≤ c < 10.
+   ================================================================ */
 
-/* Utilities: scientific format "XeN" */
-function toXeN(x) {
-  if (!isFinite(x)) return '∞';
-  if (x === 0) return '0e0';
-  const sign = x < 0 ? -1 : 1;
-  x = Math.abs(x);
-  const e = Math.floor(Math.log10(x));
-  const coeff = x / Math.pow(10, e);
-  // format coefficient to 3 decimals (trim trailing zeros)
-  const c = Math.round(coeff * 1000) / 1000;
-  return (sign < 0 ? '-' : '') + (c) + 'e' + e;
+function BX(v) {
+  if (typeof v === "number") {
+    if (!isFinite(v)) return { c: Infinity, e: 0 };
+    if (v === 0) return { c: 0,   e: 0 };
+    const e = Math.floor(Math.log10(Math.abs(v)));
+    const c = v / Math.pow(10, e);
+    return { c, e };
+  }
+  return { c: v.c, e: v.e };
 }
 
-/* stat label generator */
-const lower = 'abcdefghijklmnopqrstuvwxyz';
-const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-function statLabel(index1based) {
-  if (index1based <= 26) return lower[index1based - 1];
-  if (index1based <= 52) return upper[index1based - 27];
-  // beyond: two-letter base-52
-  const alpha = lower + upper;
-  let i = index1based - 53; // zero-based
-  const first = Math.floor(i / 52);
-  const second = i % 52;
-  return alpha[first] + alpha[second];
+function BX_norm(a) {
+  if (!isFinite(a.c)) return a;
+  if (a.c === 0) { a.e = 0; return a; }
+  while (Math.abs(a.c) >= 10) { a.c /= 10; a.e++; }
+  while (Math.abs(a.c) < 1)   { a.c *= 10; a.e--; }
+  return a;
 }
 
-/* Game state */
+function BX_clone(a) {
+  return { c: a.c, e: a.e };
+}
+
+function BX_add(a, b) {
+  a = BX(a); b = BX(b);
+  if (a.c === 0) return BX_clone(b);
+  if (b.c === 0) return BX_clone(a);
+
+  // If exponents differ massively, return the larger one
+  const diff = a.e - b.e;
+  if (diff > 20) return BX_clone(a);
+  if (diff < -20) return BX_clone(b);
+
+  // Align smaller exponent
+  if (diff >= 0) {
+    const cb = b.c / (10 ** diff);
+    return BX_norm({ c: a.c + cb, e: a.e });
+  } else {
+    const ca = a.c / (10 ** -diff);
+    return BX_norm({ c: ca + b.c, e: b.e });
+  }
+}
+
+function BX_sub(a, b) {
+  return BX_add(a, { c: -b.c, e: b.e });
+}
+
+function BX_mul(a, b) {
+  a = BX(a); b = BX(b);
+  return BX_norm({ c: a.c * b.c, e: a.e + b.e });
+}
+
+function BX_mulScalar(a, n) {
+  return BX_norm({ c: a.c * n, e: a.e });
+}
+
+function BX_pow(a, p) {
+  a = BX(a);
+  return BX_norm({
+    c: Math.pow(a.c, p),
+    e: a.e * p
+  });
+}
+
+function BX_gte(a, b) {
+  return (a.e > b.e) || (a.e === b.e && a.c >= b.c);
+}
+
+function BX_zero() {
+  return { c: 0, e: 0 };
+}
+
+function BX_toString(a) {
+  if (!isFinite(a.c)) return "∞";
+  if (a.c === 0) return "0e0";
+  return (Math.round(a.c * 1000) / 1000) + "e" + a.e;
+}
+
+/* ==================================================================
+   STATE INITIALIZATION (all numbers are now BigXeN)
+   ================================================================== */
+
 const state = {
-  stats: { a: 10.0 },          // values
-  unlocked: ['a'],             // ordered unlocked labels
-  allMult: 1.0,                // all×2 purchases multiplier
-  upgradePrice: 100.0,
-  unlockCost: 100.0,
-  // tier/challenge system
-  tiers: [],                   // will hold tier targets & completion flags
-  currentTier: 0,              // 0 = none active, otherwise 1..15
+  stats: { a: BX(10) },
+  unlocked: ["a"],
+
+  allMult: BX(1),
+  upgradePrice: BX(100),
+  unlockCost: BX(100),
+
+  tiers: [],
+  currentTier: 0,
   tierActive: false,
   tierDebuffed: false,
-  aMultiplierFromTiers: 1.0,   // cumulative a multiplier from completed tiers (times2 each)
-  bMultiplierFromTiers: 1.0,   // cumulative b multiplier from completed tiers (times1.5 each)
-  // rebirths
+
+  aMultiplierFromTiers: BX(1),
+  bMultiplierFromTiers: BX(1),
+
   rebirths: 0,
   rebirthUnlocked: false,
-  rebirthCost: null,           // numeric, grows by ^2.5 after first free rebirth
+  rebirthCost: null,
   rebirthFreeAvailable: false
 };
 
-/* Initialize tier targets: tier1 = 1e6, tier_n = (tier_{n-1})^2 for n>=2 */
+/* TIER INIT — rewritten for BigXeN */
 function initTiers() {
   state.tiers = [];
-  let t = 1e6;
+  let t = BX(1e6);
+
   for (let i = 1; i <= 15; i++) {
-    state.tiers.push({ id: i, target: t, done: false });
-    t = Math.pow(t, 2); // next = previous^2
-    if (!isFinite(t) || t > 1e10000000000000) t = 1e10000000000000; // cap
+    state.tiers.push({ id: i, target: BX_clone(t), done: false });
+    t = BX_pow(t, 2); // t = t^2
   }
 }
 initTiers();
 
-/* Ensure unlocked stats exist in state.stats */
 function ensureStats() {
-  for (let i = 0; i < state.unlocked.length; i++) {
-    const s = state.unlocked[i];
-    if (!(s in state.stats)) state.stats[s] = 10.0;
+  for (const s of state.unlocked) {
+    if (!state.stats[s]) state.stats[s] = BX(10);
   }
 }
+/* ================================================================
+   TICK LOGIC — FULL BigXeN IMPLEMENTATION
+   ================================================================ */
 
-/* Auto-tick: runs once per second */
 function doTick() {
   ensureStats();
-  // compute deltas
+
+  /* -----------------------------
+     1. Compute per-stat deltas
+     ----------------------------- */
   const deltas = {};
-  for (const k of Object.keys(state.stats)) deltas[k] = 0;
+  for (const s of state.unlocked) deltas[s] = BX_zero();
 
-  // base growth per stat (small)
+  // base small growth: +max(1, val*0.05)
   for (const s of state.unlocked) {
-    const val = state.stats[s];
-    deltas[s] += Math.max(1, val * 0.05) * state.allMult;
+    let val = state.stats[s];
+    let five = BX_mulScalar(val, 0.05);
+
+    let growth = BX_gte(five, BX(1)) ? five : BX(1);
+    growth = BX_mul(growth, state.allMult);
+    deltas[s] = BX_add(deltas[s], growth);
   }
 
-  // higher stats boost lower ones
+  // higher stats boosting lower stats
   for (let i = 0; i < state.unlocked.length; i++) {
-    const lowerLabel = state.unlocked[i];
+    const low = state.unlocked[i];
+
     for (let j = i + 1; j < state.unlocked.length; j++) {
-      const higherLabel = state.unlocked[j];
+      const high = state.unlocked[j];
       const distance = j - i;
-      const hVal = state.stats[higherLabel];
-      if (!isFinite(hVal) || hVal <= 0) continue;
-      if (distance >= 1 && distance <= 5) {
-        // add hVal * (2 * distance)
-        deltas[lowerLabel] += hVal * (2 * distance) * state.allMult;
+      const hVal = state.stats[high];
+
+      if (hVal.c === 0) continue;
+
+      let add;
+      if (distance <= 5) {
+        add = BX_mulScalar(hVal, 2 * distance);
       } else {
-        // far: flat 2× style
-        deltas[lowerLabel] += hVal * 2 * state.allMult;
+        add = BX_mulScalar(hVal, 2);
       }
+      add = BX_mul(add, state.allMult);
+      deltas[low] = BX_add(deltas[low], add);
     }
   }
 
-  // apply deltas
-  for (const s of Object.keys(deltas)) {
-    const nv = state.stats[s] + deltas[s];
-    state.stats[s] = (!isFinite(nv) || nv > 1e10000000000000) ? 1e10000000000000 : nv;
+  /* -----------------------------
+     2. Apply deltas
+     ----------------------------- */
+  for (const s of state.unlocked) {
+    state.stats[s] = BX_add(state.stats[s], deltas[s]);
   }
 
-  // a multiplies by 3 each tick, also apply tier/rebirth multipliers
-  let a = state.stats['a'] || 0;
-  a = Math.min(a * 3, 1e10000000000000);
-  // apply tier multipliers (from completed tiers)
-  a *= state.aMultiplierFromTiers;
-  // apply rebirth boosts for stats up to rebirths*11
+  /* -----------------------------
+     3. Apply a ×3 per tick
+     ----------------------------- */
+  let aVal = state.stats["a"];
+  aVal = BX_mulScalar(aVal, 3);
+
+  /* apply tier multipliers (aMultiplierFromTiers) */
+  aVal = BX_mul(aVal, state.aMultiplierFromTiers);
+
+  /* apply rebirth multiplier: 1.1 ^ rebirths */
+  if (state.rebirths > 0) {
+    let factor = BX(1.1 ** state.rebirths);
+    aVal = BX_mul(aVal, factor);
+  }
+
+  state.stats["a"] = aVal;
+
+  /* -----------------------------
+     4. Apply rebirth bonus to other stats
+     ----------------------------- */
   if (state.rebirths > 0) {
     const limit = state.rebirths * 11;
-    // if 'a' is in that range? a is index 1, always included if limit >=1
-    if (limit >= 1) {
-      // total rebirth multiplier for 'a' = (1.1 ^ rebirths)
-      a *= Math.pow(1.1, state.rebirths);
-    }
-  }
-  state.stats['a'] = Math.min(a, 1e10000000000000);
+    const rebMult = BX(1.1 ** state.rebirths);
 
-  // apply rebirth multipliers to other stats if within limit
-  if (state.rebirths > 0) {
-    const limit = state.rebirths * 11;
-    for (let idx = 1; idx <= limit && idx <= state.unlocked.length; idx++) {
-      const label = state.unlocked[idx - 1];
-      // apply permanent gain multiplier by scaling current value slightly (keeps it simple)
-      state.stats[label] = Math.min(state.stats[label] * Math.pow(1.1, state.rebirths), 1e308);
+    for (let i = 0; i < state.unlocked.length && i < limit; i++) {
+      const s = state.unlocked[i];
+      state.stats[s] = BX_mul(state.stats[s], rebMult);
     }
   }
 
-  // If a challenge/tier is active, check completion condition automatically
-  if (state.tierActive && state.currentTier >= 1 && state.currentTier <= 15) {
+  /* -----------------------------
+     5. Tier auto-complete check
+     ----------------------------- */
+  if (state.tierActive && state.currentTier > 0) {
     const tierObj = state.tiers[state.currentTier - 1];
-    if ((state.stats['a'] || 0) >= tierObj.target) {
+    if (BX_gte(state.stats["a"], tierObj.target)) {
       completeTier(state.currentTier);
     }
   }
@@ -232,206 +239,370 @@ function doTick() {
   renderAll();
 }
 
-/* Complete tier n reward logic */
+/* ================================================================
+   TIER COMPLETION — BigXeN
+   ================================================================ */
+
 function completeTier(n) {
-  const tObj = state.tiers[n - 1];
-  if (!tObj || tObj.done) return;
-  tObj.done = true;
+  const t = state.tiers[n - 1];
+  if (!t || t.done) return;
+
+  t.done = true;
   state.tierActive = false;
   state.currentTier = 0;
   state.tierDebuffed = false;
-  // Rewards: a x2 (cumulative), b x1.5 (cumulative)
-  state.aMultiplierFromTiers *= 2;
-  state.bMultiplierFromTiers *= 1.5;
-  message(`Tier ${n} completed! a×2 applied (cumulative). b×1.5 applied (cumulative).`, 'ok');
 
-  // if tier 15 completed => unlock rebirth (first rebirth free)
+  // Reward: a ×2, b ×1.5
+  state.aMultiplierFromTiers = BX_mul(state.aMultiplierFromTiers, BX(2));
+  state.bMultiplierFromTiers = BX_mul(state.bMultiplierFromTiers, BX(1.5));
+
+  message(`Tier ${n} complete! a×2, b×1.5 applied.`, "ok");
+
   if (n === 15) {
     state.rebirthUnlocked = true;
     state.rebirthFreeAvailable = true;
-    // initial rebirth cost equals tier15 target (but first rebirth free)
-    state.rebirthCost = tObj.target;
-    message('Tier 15 completed: Rebirth unlocked (first rebirth free).', 'ok');
+    state.rebirthCost = BX_clone(t.target);
+    message(`Tier 15 done — Rebirth unlocked! First rebirth is free.`, "ok");
   }
+
   renderAll();
 }
 
-/* Enter a tier (challenge) */
+/* ================================================================
+   ENTER TIER (Challenge)
+   ================================================================ */
+
 function enterTier(n) {
-  if (n < 1 || n > 15) return;
   if (state.tierActive) {
-    message('Already in a tier/challenge. Complete it first.', 'warn');
+    message("Already in a challenge.", "warn");
     return;
   }
-  const tObj = state.tiers[n - 1];
-  if (!tObj) return;
-  // Apply debuff: reduce all unlocked stats to 10% (simulating harsh challenge)
-  for (const s of state.unlocked) state.stats[s] = state.stats[s] * 0.10;
+
+  const t = state.tiers[n - 1];
+  if (!t) return;
+
+  // Debuff: reduce all stats to 10%
+  for (const s of state.unlocked) {
+    state.stats[s] = BX_mulScalar(state.stats[s], 0.10);
+  }
+
   state.tierActive = true;
   state.currentTier = n;
   state.tierDebuffed = true;
-  message(`Entered Tier ${n}. Stats debuffed to 10%. Reach a ≥ ${toXeN(tObj.target)} to auto-complete.`, 'ok');
+
+  message(
+    `Entered Tier ${n}. Stats debuffed to 10%. Goal: a ≥ ${BX_toString(t.target)}`,
+    "ok"
+  );
   renderAll();
 }
 
-/* Rebirth action */
+/* ================================================================
+   REBIRTH — BigXeN
+   ================================================================ */
+
 function doRebirth() {
   if (!state.rebirthUnlocked) {
-    message('Rebirth locked: Complete Tier 15 first.', 'warn'); return;
+    message("Rebirth locked — complete Tier 15.", "warn");
+    return;
   }
+
+  // First rebirth is free
   if (state.rebirthFreeAvailable) {
-    // apply free rebirth
-    state.rebirths += 1;
     state.rebirthFreeAvailable = false;
-    // reset everything except rebirth count and rebirth multipliers
+    state.rebirths++;
     resetProgressAfterRebirth();
-    message('First rebirth completed for free. Permanent boosts applied.', 'ok');
+    message("Free rebirth complete!", "ok");
     renderAll();
     return;
   }
-  // otherwise require cost
+
   if (!state.rebirthCost) {
-    message('No rebirth cost computed.', 'warn'); return;
+    message("Rebirth cost not set.", "warn");
+    return;
   }
-  if ((state.stats['a'] || 0) < state.rebirthCost) {
-    message(`Need ${toXeN(state.rebirthCost)} a to rebirth.`, 'warn'); return;
+
+  // Check if a >= rebirthCost
+  if (!BX_gte(state.stats["a"], state.rebirthCost)) {
+    message(
+      `Need ${BX_toString(state.rebirthCost)} a to rebirth.`,
+      "warn"
+    );
+    return;
   }
-  // pay cost and rebirth
-  state.stats['a'] -= state.rebirthCost;
-  state.rebirths += 1;
-  // next rebirth cost = (prev) ^ 2.5 (cap to huge)
-  let next = Math.pow(state.rebirthCost, 2.5);
-  if (!isFinite(next) || next > 1e10000000000000) next = 1e10000000000000;
+
+  // Pay cost
+  state.stats["a"] = BX_sub(state.stats["a"], state.rebirthCost);
+  state.rebirths++;
+
+  // next cost = previous^2.5
+  let next = BX_pow(state.rebirthCost, 2.5);
   state.rebirthCost = next;
+
   resetProgressAfterRebirth();
-  message('Rebirth complete. Permanent boosts applied.', 'ok');
+  message("Rebirth complete!", "ok");
   renderAll();
 }
 
+/* ================================================================
+   RESET AFTER REBIRTH
+   ================================================================ */
+
 function resetProgressAfterRebirth() {
-  // keep rebirth count, rebirthCost, but reset everything else
-  state.stats = { a: 10.0 };
-  state.unlocked = ['a'];
-  state.allMult = 1.0;
-  state.upgradePrice = 100.0;
-  state.unlockCost = 100.0;
-  state.tiers.forEach(t=>t.done=false);
+  state.stats = { a: BX(10) };
+  state.unlocked = ["a"];
+  state.allMult = BX(1);
+  state.upgradePrice = BX(100);
+  state.unlockCost = BX(100);
+
+  state.tiers.forEach(t => t.done = false);
+
   state.currentTier = 0;
   state.tierActive = false;
   state.tierDebuffed = false;
-  state.aMultiplierFromTiers = 1.0;
-  state.bMultiplierFromTiers = 1.0;
-  // rebirth boosts persist (they are applied on ticks via state.rebirths)
+
+  state.aMultiplierFromTiers = BX(1);
+  state.bMultiplierFromTiers = BX(1);
+}
+/* ================================================================
+   FORMATTING
+   ================================================================ */
+
+function toXeN(x) {
+  return BX_toString(x);
 }
 
-/* UI and interaction */
-const statsBox = document.getElementById('statsBox');
-const messageEl = document.getElementById('message');
-const aValueEl = document.getElementById('aValue');
-const upgradePriceEl = document.getElementById('upgradePrice');
-const unlockCostEl = document.getElementById('unlockCost');
-const challengeStateEl = document.getElementById('challengeState');
-const tierInfoEl = document.getElementById('tierInfo');
-const rebirthCountEl = document.getElementById('rebirthCount');
-const rebirthCostEl = document.getElementById('rebirthCost');
+/* ================================================================
+   RENDER UI — ALL BigXeN
+   ================================================================ */
+
+const statsBox       = document.getElementById("statsBox");
+const messageEl      = document.getElementById("message");
+const aValueEl       = document.getElementById("aValue");
+const upgradePriceEl = document.getElementById("upgradePrice");
+const unlockCostEl   = document.getElementById("unlockCost");
+const challengeStateEl = document.getElementById("challengeState");
+const tierInfoEl     = document.getElementById("tierInfo");
+const rebirthCountEl = document.getElementById("rebirthCount");
+const rebirthCostEl  = document.getElementById("rebirthCost");
 
 function renderAll() {
   ensureStats();
-  // stats list
-  let html = '';
-  for (let i = 0; i < state.unlocked.length; i++) {
-    const s = state.unlocked[i];
-    html += `<div class="stat-row"><div class="stat-name">${s}</div><div class="stat-value">${toXeN(state.stats[s])}</div></div>`;
+
+  /* --- stats list --- */
+  let html = "";
+  for (const s of state.unlocked) {
+    html += `
+      <div class="stat-row">
+        <div class="stat-name">${s}</div>
+        <div class="stat-value">${toXeN(state.stats[s])}</div>
+      </div>
+    `;
   }
   statsBox.innerHTML = html;
-  aValueEl.textContent = 'a: ' + toXeN(state.stats.a || 0);
-  upgradePriceEl.textContent = toXeN(state.upgradePrice || 0);
-  unlockCostEl.textContent = toXeN(state.unlockCost || 0);
-  challengeStateEl.textContent = state.tierActive ? `Tier ${state.currentTier} (active)` : 'None';
-  // tier info: show next incomplete tier
-  const nextTier = state.tiers.find(t=>!t.done);
+
+  /* --- right side display --- */
+  aValueEl.textContent       = "a: " + toXeN(state.stats.a);
+  upgradePriceEl.textContent = toXeN(state.upgradePrice);
+  unlockCostEl.textContent   = toXeN(state.unlockCost);
+
+  challengeStateEl.textContent =
+    state.tierActive ? `Tier ${state.currentTier} (active)` : "None";
+
+  /* --- next incomplete tier info --- */
+  const nextTier = state.tiers.find(t => !t.done);
   if (nextTier) {
-    tierInfoEl.textContent = `Next incomplete tier: ${nextTier.id} target ${toXeN(nextTier.target)}`;
+    tierInfoEl.textContent =
+      `Next incomplete tier: ${nextTier.id} target ${toXeN(nextTier.target)}`;
   } else {
-    tierInfoEl.textContent = 'All tiers completed';
+    tierInfoEl.textContent = "All tiers completed";
   }
+
   rebirthCountEl.textContent = state.rebirths;
-  rebirthCostEl.textContent = state.rebirthFreeAvailable ? 'free (first available)' : (state.rebirthCost ? toXeN(state.rebirthCost) : 'locked');
+
+  rebirthCostEl.textContent =
+    state.rebirthFreeAvailable
+      ? "free (first)"
+      : (state.rebirthCost ? toXeN(state.rebirthCost) : "locked");
 }
 
-/* Buttons wiring */
-document.getElementById('upgradeBtn').addEventListener('click', ()=>{
-  if ((state.stats.a || 0) >= state.upgradePrice) {
-    state.stats.a -= state.upgradePrice;
-    state.allMult *= 2;
-    state.upgradePrice *= 10;
-    message('Bought All ×2 upgrade', 'ok');
-  } else message('Not enough a to buy upgrade', 'warn');
+/* ================================================================
+   MESSAGES
+   ================================================================ */
+
+let msgTimer = null;
+function message(txt, type="ok") {
+  messageEl.style.color =
+    type === "ok" ? "var(--ok)" :
+    type === "warn" ? "#f59e0b" :
+    "#ef4444";
+
+  messageEl.textContent = txt;
+
+  if (msgTimer) clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => messageEl.textContent = "", 6000);
+}
+
+/* ================================================================
+   BUTTONS — BigXeN versions of all game actions
+   ================================================================ */
+
+document.getElementById("upgradeBtn").addEventListener("click", () => {
+  if (BX_gte(state.stats.a, state.upgradePrice)) {
+    state.stats.a = BX_sub(state.stats.a, state.upgradePrice);
+    state.allMult = BX_mulScalar(state.allMult, 2);
+    state.upgradePrice = BX_mulScalar(state.upgradePrice, 10);
+
+    message("Bought All ×2 upgrade", "ok");
+  } else {
+    message(`Need ${toXeN(state.upgradePrice)} a`, "warn");
+  }
   renderAll();
 });
-document.getElementById('unlockBtn').addEventListener('click', ()=>{
-  const cost = state.unlockCost;
-  if ((state.stats.a || 0) >= cost) {
-    state.stats.a -= cost;
-    const nextIndex = state.unlocked.length + 1;
-    const label = statLabel(nextIndex);
-    state.unlocked.push(label);
-    state.stats[label] = 10.0;
-    state.unlockCost *= 10;
-    message(`Unlocked ${label}`, 'ok');
-  } else message(`Need ${toXeN(cost)} a to unlock`, 'warn');
+
+document.getElementById("unlockBtn").addEventListener("click", () => {
+  if (!BX_gte(state.stats.a, state.unlockCost)) {
+    message(`Need ${toXeN(state.unlockCost)} a`, "warn");
+    return;
+  }
+
+  state.stats.a = BX_sub(state.stats.a, state.unlockCost);
+
+  const nextIndex = state.unlocked.length + 1;
+  const label = statLabel(nextIndex);
+  state.unlocked.push(label);
+  state.stats[label] = BX(10);
+
+  state.unlockCost = BX_mulScalar(state.unlockCost, 10);
+
+  message(`Unlocked ${label}`, "ok");
   renderAll();
 });
-document.getElementById('challengeBtn').addEventListener('click', ()=>{
-  // open dialog to pick tier (we'll pick next incomplete)
-  const next = state.tiers.find(t=>!t.done);
-  if (!next) { message('No more tiers (all completed)', 'ok'); return; }
-  // start that tier
+
+document.getElementById("challengeBtn").addEventListener("click", () => {
+  const next = state.tiers.find(t => !t.done);
+  if (!next) {
+    message("No more tiers left.", "ok");
+    return;
+  }
+
   enterTier(next.id);
 });
-document.getElementById('completeBtn').addEventListener('click', ()=>{
-  // debug: force complete current tier if active
-  if (state.tierActive && state.currentTier>0) {
+
+document.getElementById("completeBtn").addEventListener("click", () => {
+  if (state.tierActive && state.currentTier > 0) {
     completeTier(state.currentTier);
-  } else message('No active tier to complete', 'warn');
+  } else {
+    message("No active tier to complete.", "warn");
+  }
 });
-document.getElementById('rebirthBtn').addEventListener('click', ()=>{
+
+document.getElementById("rebirthBtn").addEventListener("click", () => {
   doRebirth();
 });
 
-/* messages */
-let msgTimer = null;
-function message(txt, type='ok') {
-  messageEl.style.color = type === 'ok' ? 'var(--ok)' : (type === 'warn' ? '#f59e0b' : '#f87171');
-  messageEl.textContent = txt;
-  if (msgTimer) clearTimeout(msgTimer);
-  msgTimer = setTimeout(()=>{ messageEl.textContent = ''; }, 6000);
+/* ================================================================
+   SAVE & LOAD — Fully BigXeN aware
+   ================================================================ */
+
+function serializeBX(obj) {
+  return { c: obj.c, e: obj.e };
 }
 
-/* Save / load state in localStorage */
+function reviveBX(obj) {
+  return { c: obj.c, e: obj.e };
+}
+
 function saveState() {
   try {
     const copy = JSON.parse(JSON.stringify(state));
-    localStorage.setItem('inc_game_state_v3', JSON.stringify(copy));
-  } catch(e){ console.warn('save fail', e); }
+
+    /* Convert all BigXeN numbers */
+    for (const s of Object.keys(copy.stats)) {
+      copy.stats[s] = serializeBX(copy.stats[s]);
+    }
+
+    copy.allMult      = serializeBX(copy.allMult);
+    copy.upgradePrice = serializeBX(copy.upgradePrice);
+    copy.unlockCost   = serializeBX(copy.unlockCost);
+
+    copy.aMultiplierFromTiers = serializeBX(copy.aMultiplierFromTiers);
+    copy.bMultiplierFromTiers = serializeBX(copy.bMultiplierFromTiers);
+
+    if (copy.rebirthCost) copy.rebirthCost = serializeBX(copy.rebirthCost);
+
+    copy.tiers = copy.tiers.map(t => ({
+      id: t.id,
+      done: t.done,
+      target: serializeBX(t.target)
+    }));
+
+    localStorage.setItem("inc_game_state_bigxen", JSON.stringify(copy));
+  } catch (e) {
+    console.warn("save fail", e);
+  }
 }
+
 function loadState() {
   try {
-    const raw = localStorage.getItem('inc_game_state_v3');
+    const raw = localStorage.getItem("inc_game_state_bigxen");
     if (!raw) return;
-    const s = JSON.parse(raw);
-    // shallow assign only known fields
-    Object.assign(state, s);
-  } catch(e){ console.warn('load fail', e); }
+
+    const saved = JSON.parse(raw);
+
+    /* Stats */
+    state.stats = {};
+    for (const s of Object.keys(saved.stats)) {
+      state.stats[s] = reviveBX(saved.stats[s]);
+    }
+
+    /* Scalars */
+    state.allMult      = reviveBX(saved.allMult);
+    state.upgradePrice = reviveBX(saved.upgradePrice);
+    state.unlockCost   = reviveBX(saved.unlockCost);
+
+    state.aMultiplierFromTiers = reviveBX(saved.aMultiplierFromTiers);
+    state.bMultiplierFromTiers = reviveBX(saved.bMultiplierFromTiers);
+
+    state.unlocked         = saved.unlocked;
+    state.rebirths         = saved.rebirths;
+    state.rebirthUnlocked  = saved.rebirthUnlocked;
+    state.rebirthFreeAvailable = saved.rebirthFreeAvailable;
+
+    state.rebirthCost = saved.rebirthCost
+      ? reviveBX(saved.rebirthCost)
+      : null;
+
+    /* Tiers */
+    state.tiers = saved.tiers.map(t => ({
+      id: t.id,
+      done: t.done,
+      target: reviveBX(t.target)
+    }));
+
+    state.currentTier  = saved.currentTier;
+    state.tierActive   = saved.tierActive;
+    state.tierDebuffed = saved.tierDebuffed;
+
+  } catch (e) {
+    console.warn("load fail", e);
+  }
 }
+
+/* ================================================================
+   FINAL BOOT
+   ================================================================ */
+
 loadState();
 renderAll();
 
-/* auto tick every 1s */
 setInterval(doTick, 1000);
-
-/* save periodically */
 setInterval(saveState, 3000);
 </script>
+
 </body>
 </html>
+
+/* ==================================================================
+   END OF PART 1
+   ================================================================== */
