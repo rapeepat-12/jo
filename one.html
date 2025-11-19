@@ -77,49 +77,14 @@ function BX_norm(a) {
 }
 
 function BX_clone(a) { return { c:a.c, e:a.e }; }
-
-function BX_add(a,b) {
-  a = BX(a); b = BX(b);
-  if (a.c === 0) return BX_clone(b);
-  if (b.c === 0) return BX_clone(a);
-  const diff = a.e - b.e;
-  if (diff > 20) return BX_clone(a);
-  if (diff < -20) return BX_clone(b);
-  if (diff >= 0) {
-    return BX_norm({ c:a.c + b.c / 10**diff, e:a.e });
-  } else {
-    return BX_norm({ c:a.c/10**(-diff) + b.c, e:b.e });
-  }
-}
-
-function BX_sub(a,b) {
-  return BX_add(a, {c:-b.c, e:b.e});
-}
-
-function BX_mul(a,b) {
-  a = BX(a); b = BX(b);
-  return BX_norm({ c:a.c*b.c, e:a.e+b.e });
-}
-
-function BX_mulScalar(a,n) {
-  return BX_norm({ c:a.c*n, e:a.e });
-}
-
-function BX_pow(a,p) {
-  a = BX(a);
-  return BX_norm({ c:Math.pow(a.c,p), e:a.e*p });
-}
-
-function BX_gte(a,b) {
-  return (a.e > b.e) || (a.e === b.e && a.c >= b.c);
-}
-
-function BX_zero() { return {c:0,e:0}; }
-
-function BX_toString(a) {
-  if (!isFinite(a.c)) return "∞";
-  return `${(Math.round(a.c*1000)/1000)}e${a.e}`;
-}
+function BX_add(a,b) { a=BX(a);b=BX(b);const diff=a.e-b.e;if(diff>20)return BX_clone(a);if(diff<-20)return BX_clone(b);return BX_norm(diff>=0?{c:a.c+b.c/10**diff,e:a.e}:{c:a.c/10**(-diff)+b.c,e:b.e}); }
+function BX_sub(a,b) { return BX_add(a,{c:-b.c,e:b.e}); }
+function BX_mul(a,b){a=BX(a);b=BX(b);return BX_norm({c:a.c*b.c,e:a.e+b.e});}
+function BX_mulScalar(a,n){return BX_norm({c:a.c*n,e:a.e});}
+function BX_pow(a,p){a=BX(a);return BX_norm({c:Math.pow(a.c,p),e:a.e*p});}
+function BX_gte(a,b){return(a.e>b.e)||(a.e===b.e&&a.c>=b.c);}
+function BX_zero(){return {c:0,e:0};}
+function BX_toString(a){if(!isFinite(a.c)) return "∞";return `${(Math.round(a.c*1000)/1000)}e${a.e}`;}
 
 /* ================================================================
    STATE
@@ -131,15 +96,12 @@ const state = {
   allMult:BX(1),
   upgradePrice:BX(100),
   unlockCost:BX(100),
-
   tiers:[],
   currentTier:0,
   tierActive:false,
   tierDebuffed:false,
-
   aMultiplierFromTiers:BX(1),
   bMultiplierFromTiers:BX(1),
-
   rebirths:0,
   rebirthUnlocked:false,
   rebirthFreeAvailable:false,
@@ -162,7 +124,6 @@ function ensureStats(){
   }
 }
 
-/* Stat label generator */
 function statLabel(n){
   let alphabet="abcdefghijklmnopqrstuvwxyz";
   if (n<=26) return alphabet[n-1];
@@ -220,17 +181,21 @@ function doTick(){
 
   /* Multipliers */
   aVal=BX_mul(aVal,state.aMultiplierFromTiers);
-  state.stats.a=aVal;
 
-  /* ================================================================
-     REBIRTH MULTIPLIER: All stats ^ (1.5 ^ rebirths)
-     ================================================================ */
-  if(state.rebirths > 0){
-    const exp = 1.5 ** state.rebirths;
+  /* ===============================
+     REBIRTH BUFF: stat^(1.5^rebirth)
+     =============================== */
+  if(state.rebirths>0){
+    const rebPow = Math.pow(1.5,state.rebirths);
     for(const s of state.unlocked){
-      state.stats[s] = BX_pow(state.stats[s], BX(exp));
+      let v = Math.pow(state.stats[s].c*Math.pow(10,state.stats[s].e), rebPow);
+      let e = Math.floor(Math.log10(v));
+      let c = v/Math.pow(10,e);
+      state.stats[s] = {c,e};
     }
   }
+
+  state.stats.a=aVal;
 
   /* Auto-complete tier */
   if(state.tierActive && state.currentTier>0){
@@ -240,7 +205,6 @@ function doTick(){
     }
   }
 
-  saveState();
   renderAll();
 }
 
@@ -318,7 +282,6 @@ function doRebirth(){
     return;
   }
 
-  /* First rebirth free */
   if(state.rebirthFreeAvailable){
     state.rebirthFreeAvailable=false;
     state.rebirths++;
@@ -347,7 +310,7 @@ function doRebirth(){
 }
 
 /* ================================================================
-   UI & BUTTONS
+   UI
    ================================================================ */
 
 function toXeN(x){ return BX_toString(x); }
@@ -399,6 +362,10 @@ function message(txt,type="ok"){
   if(msgTimer) clearTimeout(msgTimer);
   msgTimer=setTimeout(()=>messageEl.textContent="",6000);
 }
+
+/* ================================================================
+   BUTTONS
+   ================================================================ */
 
 document.getElementById("upgradeBtn").onclick=()=>{
   if(!BX_gte(state.stats.a,state.upgradePrice)){
@@ -453,82 +420,16 @@ document.getElementById("rebirthBtn").onclick=()=>{
 };
 
 /* ================================================================
-   SAVE / LOAD
-   ================================================================ */
-
-function serializeBX(o){ return {c:o.c,e:o.e}; }
-function reviveBX(o){ return {c:o.c,e:o.e}; }
-
-function saveState(){
-  try{
-    const s=JSON.parse(JSON.stringify(state));
-
-    for(const k of Object.keys(s.stats)){
-      s.stats[k]=serializeBX(s.stats[k]);
-    }
-
-    s.allMult=serializeBX(s.allMult);
-    s.upgradePrice=serializeBX(s.upgradePrice);
-    s.unlockCost=serializeBX(s.unlockCost);
-    s.aMultiplierFromTiers=serializeBX(s.aMultiplierFromTiers);
-    s.bMultiplierFromTiers=serializeBX(s.bMultiplierFromTiers);
-
-    if(s.rebirthCost) s.rebirthCost=serializeBX(s.rebirthCost);
-
-    s.tiers=s.tiers.map(t=>({
-      id:t.id,
-      done:t.done,
-      target:serializeBX(t.target)
-    }));
-
-    localStorage.setItem("BIGXEN_GAME",JSON.stringify(s));
-  }catch(e){}
-}
-
-function loadState(){
-  try{
-    const raw=localStorage.getItem("BIGXEN_GAME");
-    if(!raw) return;
-    const s=JSON.parse(raw);
-
-    state.stats={};
-    for(const k of Object.keys(s.stats)){
-      state.stats[k]=reviveBX(s.stats[k]);
-    }
-
-    state.unlocked=s.unlocked;
-    state.allMult=reviveBX(s.allMult);
-    state.upgradePrice=reviveBX(s.upgradePrice);
-    state.unlockCost=reviveBX(s.unlockCost);
-    state.aMultiplierFromTiers=reviveBX(s.aMultiplierFromTiers);
-    state.bMultiplierFromTiers=reviveBX(s.bMultiplierFromTiers);
-
-    state.rebirths=s.rebirths;
-    state.rebirthUnlocked=s.rebirthUnlocked;
-    state.rebirthFreeAvailable=s.rebirthFreeAvailable;
-    state.rebirthCost=s.rebirthCost?reviveBX(s.rebirthCost):null;
-
-    state.tiers=s.tiers.map(t=>({
-      id:t.id,
-      done:t.done,
-      target:reviveBX(t.target)
-    }));
-
-    state.currentTier=s.currentTier;
-    state.tierActive=s.tierActive;
-    state.tierDebuffed=s.tierDebuffed;
-
-  }catch(e){}
-}
-
-/* ================================================================
    BOOT
    ================================================================ */
 
-loadState();
 renderAll();
 setInterval(doTick,1000);
-setInterval(saveState,3000);
+
+/* Clear localStorage and reset on exit */
+window.addEventListener("beforeunload", ()=>{
+  localStorage.removeItem("BIGXEN_GAME");
+});
 
 </script>
 
